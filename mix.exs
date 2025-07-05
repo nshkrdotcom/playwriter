@@ -1,28 +1,117 @@
 defmodule Playwriter.MixProject do
   use Mix.Project
 
+  @version "0.0.1"
+  @source_url "https://github.com/nshkrdotcom/playwriter"
+
   def project do
     [
       app: :playwriter,
-      version: "0.1.0",
-      elixir: "~> 1.18",
+      version: @version,
+      elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      escript: [main_module: Playwriter.CLI]
+      escript: [main_module: Playwriter.CLI],
+      
+      # Hex package configuration
+      package: package(),
+      description: description(),
+      
+      # Documentation
+      name: "Playwriter",
+      source_url: @source_url,
+      homepage_url: @source_url,
+      docs: docs(),
+      
+      # Build tools
+      preferred_cli_env: [
+        "hex.publish": :dev
+      ]
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger]
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
+  defp description do
+    """
+    Cross-platform browser automation for Elixir with advanced WSL-to-Windows integration.
+    Features headed browser support, Chrome profile integration, and WebSocket-based 
+    remote browser control for seamless automation across platforms.
+    """
+  end
+
+  defp package do
+    [
+      name: "playwriter",
+      files: [
+        "lib",
+        "mix.exs",
+        "README.md",
+        "CHANGELOG.md",
+        "LICENSE",
+        # Essential scripts for Windows integration
+        "start_true_headed_server.sh",
+        "kill_playwright.ps1", 
+        "list_chrome_profiles.ps1",
+        "start_chromium.ps1"
+      ],
+      maintainers: ["NSHkr"],
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => @source_url,
+        "Documentation" => "https://hexdocs.pm/playwriter"
+      },
+      exclude_patterns: [
+        # Development and debug files
+        "debug_*",
+        "test_*", 
+        "check_*",
+        "simple_*",
+        # Deprecated scripts
+        "start_headed_server.sh",
+        "start_windows_playwright_server.sh",
+        "start_headed_server_3334.ps1",
+        "custom_headed_server.js",
+        "playwright_server_manager.ps1",
+        "manual_*.md",
+        # Build artifacts
+        "_build",
+        "deps"
+      ]
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      source_ref: "v#{@version}",
+      source_url: @source_url,
+      extras: [
+        "README.md",
+        "CHANGELOG.md"
+      ],
+      groups_for_modules: [
+        "Core": [Playwriter, Playwriter.Fetcher],
+        "CLI": [Playwriter.CLI], 
+        "Windows Integration": [
+          Playwriter.WindowsBrowserAdapter,
+          Playwriter.WindowsBrowserDirect
+        ]
+      ]
+    ]
+  end
+
   defp deps do
     [
-      {:playwright, "~> 1.49.1-alpha.2"}
+      # Core dependencies
+      {:playwright, "~> 1.49.1-alpha.2"},
+      
+      # Documentation
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 end
