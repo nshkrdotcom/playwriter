@@ -1,6 +1,9 @@
 #!/bin/bash
 
-echo "🔍 Verifying Playwriter v0.0.1 Release Package"
+# Extract version from mix.exs
+VERSION=$(grep -oP '@version "\K[^"]+' mix.exs)
+
+echo "🔍 Verifying Playwriter v$VERSION Release Package"
 echo "=============================================="
 echo
 
@@ -70,17 +73,17 @@ mix hex.build > /dev/null 2>&1
 check_step "Hex package built"
 
 echo "🔍 Verifying Package Contents..."
-if [ -f "playwriter-0.0.1.tar" ]; then
-    echo -e "${GREEN}✅ Package file created: playwriter-0.0.1.tar${NC}"
+if [ -f "playwriter-$VERSION.tar" ]; then
+    echo -e "${GREEN}✅ Package file created: playwriter-$VERSION.tar${NC}"
     
     echo "📋 Hex Package Contents:"
-    tar -tf playwriter-0.0.1.tar
+    tar -tf playwriter-$VERSION.tar
     
     echo -e "${YELLOW}📊 Package Statistics:${NC}"
-    echo "   Package size: $(ls -lh playwriter-0.0.1.tar | awk '{print $5}')"
+    echo "   Package size: $(ls -lh playwriter-$VERSION.tar | awk '{print $5}')"
     
     # Extract and check the actual file contents
-    if tar -xf playwriter-0.0.1.tar contents.tar.gz 2>/dev/null; then
+    if tar -xf playwriter-$VERSION.tar contents.tar.gz 2>/dev/null; then
         echo "   Source files: $(tar -tzf contents.tar.gz | wc -l)"
         rm -f contents.tar.gz 2>/dev/null
     fi
@@ -92,9 +95,8 @@ fi
 echo
 
 echo "✅ Version Verification..."
-VERSION_IN_MIX=$(grep '@version "0.0.1"' mix.exs)
-if [ -n "$VERSION_IN_MIX" ]; then
-    echo -e "${GREEN}✅ Version 0.0.1 in mix.exs${NC}"
+if [ -n "$VERSION" ]; then
+    echo -e "${GREEN}✅ Version $VERSION found in mix.exs${NC}"
 else
     echo -e "${RED}❌ Version not found in mix.exs${NC}"
     exit 1
@@ -123,7 +125,7 @@ check_step "CLI help command works"
 
 echo
 echo -e "${GREEN}🎉 ALL CHECKS PASSED!${NC}"
-echo -e "${GREEN}📦 Playwriter v0.0.1 is ready for Hex release${NC}"
+echo -e "${GREEN}📦 Playwriter v$VERSION is ready for Hex release${NC}"
 echo
 echo "📋 Next Steps:"
 echo "1. Run: mix hex.publish"

@@ -18,6 +18,7 @@
 - [Scripts & Utilities](#scripts--utilities)
 - [Development & Debugging](#development--debugging)
 - [Troubleshooting](#troubleshooting)
+- [Architecture Diagrams](./diagrams.md)
 
 ## Features
 
