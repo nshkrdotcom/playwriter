@@ -12,17 +12,17 @@ defmodule Playwriter.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       escript: [main_module: Playwriter.CLI],
-      
+
       # Hex package configuration
       package: package(),
       description: description(),
-      
+
       # Documentation
       name: "Playwriter",
       source_url: @source_url,
       homepage_url: @source_url,
       docs: docs(),
-      
+
       # Build tools
       preferred_cli_env: [
         "hex.publish": :dev
@@ -55,7 +55,7 @@ defmodule Playwriter.MixProject do
         "LICENSE",
         # Essential scripts for Windows integration
         "start_true_headed_server.sh",
-        "kill_playwright.ps1", 
+        "kill_playwright.ps1",
         "list_chrome_profiles.ps1",
         "start_chromium.ps1"
       ],
@@ -68,7 +68,7 @@ defmodule Playwriter.MixProject do
       exclude_patterns: [
         # Development and debug files
         "debug_*",
-        "test_*", 
+        "test_*",
         "check_*",
         "simple_*",
         # Deprecated scripts
@@ -96,8 +96,8 @@ defmodule Playwriter.MixProject do
         "diagrams.md"
       ],
       groups_for_modules: [
-        "Core": [Playwriter, Playwriter.Fetcher],
-        "CLI": [Playwriter.CLI], 
+        Core: [Playwriter, Playwriter.Fetcher],
+        CLI: [Playwriter.CLI],
         "Windows Integration": [
           Playwriter.WindowsBrowserAdapter,
           Playwriter.WindowsBrowserDirect
@@ -151,7 +151,7 @@ defmodule Playwriter.MixProject do
     [
       # Core dependencies
       {:playwright, "~> 1.49.1-alpha.2"},
-      
+
       # Documentation
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]

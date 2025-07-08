@@ -1,6 +1,6 @@
 defmodule Playwriter do
   @version "0.0.1"
-  
+
   @moduledoc """
   Cross-platform browser automation for Elixir with advanced WSL-to-Windows integration.
 
@@ -63,14 +63,69 @@ defmodule Playwriter do
   """
 
   @doc """
+  Execute a function with a configured browser page.
+
+  This is the main entry point for browser operations. It handles all the complex
+  browser setup (including Windows integration) and provides a configured page
+  to your function.
+
+  ## Parameters
+
+  - `opts` - Browser configuration options (see below)
+  - `fun` - Function that receives a configured page and returns a result
+
+  ## Options
+
+  - `:use_windows_browser` - Use Windows browser via WebSocket (default: false)
+  - `:browser_type` - Browser type (:chromium, :firefox, :webkit)
+  - `:headless` - Run in headless mode (default: true)
+  - `:chrome_profile` - Chrome profile name for Windows browsers
+  - `:cookies` - List of cookies to set
+  - `:headers` - Headers to set
+  - `:ws_endpoint` - Explicit WebSocket endpoint for remote browsers
+
+  ## Returns
+
+  - `{:ok, result}` - Success with result from your function
+  - `{:error, reason}` - Error with reason
+
+  ## Examples
+
+      # Basic HTML fetching
+      {:ok, html} = Playwriter.with_browser(%{}, fn page ->
+        Playwright.Page.goto(page, "https://example.com")
+        Playwright.Page.content(page)
+      end)
+
+      # Take a screenshot
+      {:ok, _} = Playwriter.with_browser(%{}, fn page ->
+        Playwright.Page.goto(page, "https://example.com")
+        Playwright.Page.screenshot(page, %{path: "screenshot.png"})
+      end)
+
+      # Windows browser with profile
+      {:ok, html} = Playwriter.with_browser(%{
+        use_windows_browser: true,
+        chrome_profile: "Profile 1"
+      }, fn page ->
+        Playwright.Page.goto(page, "https://example.com")
+        Playwright.Page.content(page)
+      end)
+
+  """
+  def with_browser(opts \\ %{}, fun) do
+    Playwriter.Fetcher.with_browser(opts, fun)
+  end
+
+  @doc """
   Fetch HTML content from a URL using Playwright.
 
-  This is the main entry point for simple HTML fetching. For more advanced options,
-  use `Playwriter.Fetcher.fetch_html/2`.
+  This is a convenience function that uses `with_browser/2` internally.
 
   ## Parameters
 
   - `url` - The URL to fetch HTML from
+  - `opts` - Browser configuration options (see `with_browser/2`)
 
   ## Returns
 
@@ -82,19 +137,53 @@ defmodule Playwriter do
       # Basic usage
       {:ok, html} = Playwriter.fetch_html("https://example.com")
 
-      # Check if page loaded correctly
-      case Playwriter.fetch_html("https://google.com") do
-        {:ok, html} when byte_size(html) > 1000 ->
-          IO.puts("Successfully fetched page")
-        {:ok, html} ->
-          IO.puts("Page loaded but seems small")
-        {:error, reason} ->
-          IO.puts("Failed to fetch")
-      end
+      # With Windows browser
+      {:ok, html} = Playwriter.fetch_html("https://example.com", %{
+        use_windows_browser: true,
+        chrome_profile: "Default"
+      })
 
   """
-  def fetch_html(url) do
-    Playwriter.Fetcher.fetch_html(url)
+  def fetch_html(url, opts \\ %{}) do
+    with_browser(opts, fn page ->
+      Playwright.Page.goto(page, url)
+      Playwright.Page.content(page)
+    end)
+  end
+
+  @doc """
+  Take a screenshot of a URL using Playwright.
+
+  This is a convenience function that uses `with_browser/2` internally.
+
+  ## Parameters
+
+  - `url` - The URL to take a screenshot of
+  - `path` - File path to save the screenshot
+  - `opts` - Browser configuration options (see `with_browser/2`)
+
+  ## Returns
+
+  - `{:ok, binary}` - Success with screenshot data
+  - `{:error, reason}` - Error with reason
+
+  ## Examples
+
+      # Basic usage
+      {:ok, _} = Playwriter.screenshot("https://example.com", "screenshot.png")
+
+      # With Windows browser
+      {:ok, _} = Playwriter.screenshot("https://example.com", "screenshot.png", %{
+        use_windows_browser: true,
+        headless: false
+      })
+
+  """
+  def screenshot(url, path, opts \\ %{}) do
+    with_browser(opts, fn page ->
+      Playwright.Page.goto(page, url)
+      Playwright.Page.screenshot(page, %{path: path})
+    end)
   end
 
   @doc """

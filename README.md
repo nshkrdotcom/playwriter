@@ -5,16 +5,18 @@
 [![License](https://img.shields.io/hexpm/l/playwriter.svg)](https://github.com/nshkrdotcom/playwriter/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-nshkrdotcom%2Fplaywriter-blue.svg)](https://github.com/nshkrdotcom/playwriter)
 
-**Playwriter** is an Elixir application that provides HTML fetching and web automation capabilities using Playwright. It features advanced WSL-to-Windows browser integration, allowing Elixir applications running in WSL to control visible Windows browsers with full profile support.
+**Playwriter** is an Elixir library that provides **full Playwright browser automation capabilities** with advanced WSL-to-Windows integration. It exposes the complete Playwright API through a composable design while handling complex browser setup, Windows browser control, and Chrome profile management automatically.
 
 ## Table of Contents
 
 - [Features](#features)
+- [Quick Start](#quick-start)
+- [API Reference](#api-reference)
+- [Usage Examples](#usage-examples)
+- [Windows Browser Integration](#windows-browser-integration)
 - [Architecture Overview](#architecture-overview)
 - [Installation & Setup](#installation--setup)
 - [Core Modules](#core-modules)
-- [Windows Browser Integration](#windows-browser-integration)
-- [Usage Examples](#usage-examples)
 - [Scripts & Utilities](#scripts--utilities)
 - [Development & Debugging](#development--debugging)
 - [Troubleshooting](#troubleshooting)
@@ -22,14 +24,119 @@
 
 ## Features
 
-- **Local Browser Automation**: Standard Playwright automation in headless/headed modes
-- **Cross-Platform Integration**: WSL-to-Windows browser control via WebSocket
-- **Windows Browser Support**: Use Windows Chrome/Chromium with your existing profiles
-- **Headed Browser Support**: Visible browser windows for debugging and development  
-- **Chrome Profile Integration**: Support for existing Chrome user profiles and data
-- **Flexible CLI Interface**: Multiple modes and options for different use cases
-- **Multi-Port Discovery**: Robust server discovery across multiple ports and network interfaces
-- **Automatic Cleanup**: Process management and cleanup utilities
+- **🎯 Full Playwright API Access**: Complete browser automation capabilities through composable design
+- **🔧 Composable Architecture**: Use any Playwright function with automatic browser setup
+- **🖥️ Windows Browser Integration**: Control visible Windows browsers from WSL with WebSocket
+- **👤 Chrome Profile Support**: Access existing Chrome profiles and user data
+- **🎨 Headed/Headless Modes**: Visible browser windows for debugging or headless for automation
+- **📱 Cross-Platform**: Works on Linux, macOS, and Windows with WSL integration
+- **🔄 Automatic Cleanup**: Proper resource management and process cleanup
+- **📡 Network Discovery**: Robust server discovery across multiple ports and interfaces
+
+## Quick Start
+
+```elixir
+# Add to your mix.exs
+def deps do
+  [
+    {:playwriter, "~> 0.0.2"}
+  ]
+end
+
+# Basic usage - any Playwright operation
+{:ok, html} = Playwriter.with_browser(%{}, fn page ->
+  Playwright.Page.goto(page, "https://example.com")
+  Playwright.Page.content(page)
+end)
+
+# Take screenshots
+{:ok, _} = Playwriter.screenshot("https://example.com", "screenshot.png")
+
+# Complex automation
+{:ok, title} = Playwriter.with_browser(%{}, fn page ->
+  Playwright.Page.goto(page, "https://example.com")
+  Playwright.Page.click(page, "#login")
+  Playwright.Page.fill(page, "#username", "user")
+  Playwright.Page.screenshot(page, %{path: "after_login.png"})
+  Playwright.Page.title(page)
+end)
+```
+
+## API Reference
+
+### Core Functions
+
+#### `Playwriter.with_browser/2`
+**The main composable function that provides full Playwright API access.**
+
+```elixir
+Playwriter.with_browser(opts, fun)
+```
+
+**Options:**
+- `:use_windows_browser` - Use Windows browser via WebSocket (default: false)
+- `:browser_type` - Browser type (`:chromium`, `:firefox`, `:webkit`)
+- `:headless` - Run in headless mode (default: true)
+- `:chrome_profile` - Chrome profile name for Windows browsers
+- `:cookies` - List of cookies to set
+- `:headers` - Headers to set
+- `:ws_endpoint` - Explicit WebSocket endpoint for remote browsers
+
+**Returns:** `{:ok, result}` or `{:error, reason}`
+
+#### `Playwriter.screenshot/3`
+**Convenience function for taking screenshots.**
+
+```elixir
+Playwriter.screenshot(url, path, opts \\ %{})
+```
+
+#### `Playwriter.fetch_html/2`
+**Convenience function for HTML fetching (backward compatibility).**
+
+```elixir
+Playwriter.fetch_html(url, opts \\ %{})
+```
+
+### Available Playwright Operations
+
+With `Playwriter.with_browser/2`, you can use **any** Playwright function:
+
+```elixir
+# Navigation
+Playwright.Page.goto(page, url)
+Playwright.Page.go_back(page)
+Playwright.Page.go_forward(page)
+Playwright.Page.reload(page)
+
+# Content & Screenshots
+Playwright.Page.content(page)
+Playwright.Page.screenshot(page, options)
+Playwright.Page.pdf(page, options)
+
+# Element Interaction
+Playwright.Page.click(page, selector)
+Playwright.Page.fill(page, selector, value)
+Playwright.Page.select_option(page, selector, value)
+Playwright.Page.check(page, selector)
+Playwright.Page.uncheck(page, selector)
+
+# Waiting
+Playwright.Page.wait_for_selector(page, selector)
+Playwright.Page.wait_for_load_state(page, state)
+Playwright.Page.wait_for_timeout(page, timeout)
+
+# Evaluation
+Playwright.Page.evaluate(page, script)
+Playwright.Page.evaluate_handle(page, script)
+
+# Information
+Playwright.Page.title(page)
+Playwright.Page.url(page)
+Playwright.Page.text_content(page, selector)
+Playwright.Page.inner_text(page, selector)
+Playwright.Page.inner_html(page, selector)
+```
 
 ## Architecture Overview
 
@@ -371,7 +478,61 @@ const browserServer = await chromium.launchServer({
 
 ## Usage Examples
 
-### Basic HTML Fetching
+### 🎯 New Composable API (Recommended)
+
+```elixir
+# Full Playwright API access with automatic browser setup
+{:ok, html} = Playwriter.with_browser(%{}, fn page ->
+  Playwright.Page.goto(page, "https://example.com")
+  Playwright.Page.content(page)
+end)
+
+# Take screenshots
+{:ok, _} = Playwriter.with_browser(%{}, fn page ->
+  Playwright.Page.goto(page, "https://example.com")
+  Playwright.Page.screenshot(page, %{path: "screenshot.png"})
+end)
+
+# Complex automation workflows
+{:ok, result} = Playwriter.with_browser(%{}, fn page ->
+  Playwright.Page.goto(page, "https://example.com")
+  Playwright.Page.click(page, "#login-button")
+  Playwright.Page.fill(page, "#username", "user")
+  Playwright.Page.fill(page, "#password", "pass")
+  Playwright.Page.click(page, "#submit")
+  Playwright.Page.wait_for_selector(page, ".dashboard")
+  Playwright.Page.screenshot(page, %{path: "dashboard.png"})
+  Playwright.Page.text_content(page, ".welcome-message")
+end)
+
+# Windows browser with profiles
+{:ok, html} = Playwriter.with_browser(%{
+  use_windows_browser: true,
+  chrome_profile: "Profile 1",
+  headless: false
+}, fn page ->
+  Playwright.Page.goto(page, "https://facebook.com")
+  Playwright.Page.content(page)
+end)
+```
+
+### 🚀 Convenience Functions
+
+```elixir
+# Quick HTML fetching
+{:ok, html} = Playwriter.fetch_html("https://example.com")
+
+# Quick screenshots
+{:ok, _} = Playwriter.screenshot("https://example.com", "screenshot.png")
+
+# With options
+{:ok, html} = Playwriter.fetch_html("https://example.com", %{
+  use_windows_browser: true,
+  headless: false
+})
+```
+
+### 🖥️ CLI Usage
 
 ```bash
 # Local Playwright (headless)
@@ -410,23 +571,33 @@ powershell.exe -ExecutionPolicy Bypass -File ./start_chromium.ps1
 ./playwriter --windows-browser --profile "Profile 1" https://facebook.com
 ```
 
-### Programmatic Usage
+### 🔧 Advanced Usage
 
 ```elixir
-# Direct module usage
-{:ok, html} = Playwriter.fetch_html("https://example.com")
+# Multiple operations in one browser session
+{:ok, results} = Playwriter.with_browser(%{}, fn page ->
+  pages_data = for url <- ["https://site1.com", "https://site2.com", "https://site3.com"] do
+    Playwright.Page.goto(page, url)
+    Playwright.Page.wait_for_load_state(page, "domcontentloaded")
+    
+    title = Playwright.Page.title(page)
+    html = Playwright.Page.content(page)
+    
+    # Take screenshot for each page
+    filename = url |> String.replace(~r/https?:\/\//, "") |> String.replace("/", "_")
+    Playwright.Page.screenshot(page, %{path: "#{filename}.png"})
+    
+    %{url: url, title: title, html_length: String.length(html)}
+  end
+  
+  pages_data
+end)
 
-# Windows browser with options
-opts = %{
-  use_windows_browser: true,
-  browser_type: :chromium,
-  headless: false,
-  chrome_profile: "Default"  # Future feature
-}
-{:ok, html} = Playwriter.Fetcher.fetch_html(url, opts)
-
-# Using WindowsBrowserAdapter directly
+# Using WindowsBrowserAdapter directly for advanced control
 {:ok, browser} = Playwriter.WindowsBrowserAdapter.connect_windows_browser(:chromium)
+page = Playwright.Browser.new_page(browser)
+# ... direct Playwright operations
+Playwright.Browser.close(browser)
 ```
 
 ## Scripts & Utilities
