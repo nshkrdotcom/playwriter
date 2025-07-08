@@ -8,6 +8,7 @@ defmodule PlaywriterTest do
         assert is_binary(html)
         assert String.length(html) > 0
         assert String.contains?(html, "Google")
+
       {:error, reason} ->
         # Skip test if Playwright is not properly set up
         IO.puts("Skipping test due to Playwright setup issue: #{reason}")
@@ -20,6 +21,7 @@ defmodule PlaywriterTest do
         assert String.contains?(html, "<html")
         assert String.contains?(html, "</html>")
         assert String.contains?(html, "<title>")
+
       {:error, reason} ->
         # Skip test if Playwright is not properly set up
         IO.puts("Skipping test due to Playwright setup issue: #{reason}")
