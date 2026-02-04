@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- Gradient for hexagon fill -->
+    <linearGradient id="hexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#16213e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f3460;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Gradient for play button -->
+    <linearGradient id="playGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e94560;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff6b6b;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Gradient for browser frame -->
+    <linearGradient id="browserGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4a5568;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2d3748;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Glow effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Shadow for depth -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+
+    <!-- Subtle inner shadow -->
+    <filter id="innerShadow">
+      <feOffset dx="0" dy="1"/>
+      <feGaussianBlur stdDeviation="1" result="offset-blur"/>
+      <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse"/>
+      <feFlood flood-color="#000" flood-opacity="0.15" result="color"/>
+      <feComposite operator="in" in="color" in2="inverse" result="shadow"/>
+      <feComposite operator="over" in="shadow" in2="SourceGraphic"/>
+    </filter>
+  </defs>
+
+  <!-- Hexagon background with slight padding -->
+  <polygon
+    points="100,8 178,54 178,146 100,192 22,146 22,54"
+    fill="url(#hexGradient)"
+    stroke="#e94560"
+    stroke-width="2"
+    filter="url(#shadow)"
+  />
+
+  <!-- Inner hexagon border for depth -->
+  <polygon
+    points="100,18 168,59 168,141 100,182 32,141 32,59"
+    fill="none"
+    stroke="#e94560"
+    stroke-width="0.5"
+    opacity="0.3"
+  />
+
+  <!-- Browser window frame -->
+  <g filter="url(#innerShadow)">
+    <!-- Browser outer frame -->
+    <rect x="45" y="50" width="110" height="85" rx="6" ry="6"
+          fill="url(#browserGradient)"
+          stroke="#5a6777"
+          stroke-width="1"/>
+
+    <!-- Browser title bar -->
+    <rect x="45" y="50" width="110" height="18" rx="6" ry="6"
+          fill="#3d4852"/>
+    <rect x="45" y="62" width="110" height="6" fill="#3d4852"/>
+
+    <!-- Browser control dots -->
+    <circle cx="56" cy="59" r="3" fill="#ff5f56"/>
+    <circle cx="68" cy="59" r="3" fill="#ffbd2e"/>
+    <circle cx="80" cy="59" r="3" fill="#27ca40"/>
+
+    <!-- URL bar -->
+    <rect x="92" y="54" width="58" height="10" rx="2" ry="2" fill="#2d3748"/>
+
+    <!-- Browser content area -->
+    <rect x="50" y="72" width="100" height="58" rx="2" ry="2" fill="#1a202c"/>
+  </g>
+
+  <!-- Play button (playwright symbol) -->
+  <g filter="url(#glow)">
+    <polygon
+      points="85,85 85,118 115,101.5"
+      fill="url(#playGradient)"
+      stroke="#fff"
+      stroke-width="1"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <!-- Stylized pen/writer element -->
+  <g transform="translate(120, 115) rotate(-45)">
+    <rect x="0" y="0" width="6" height="28" rx="1" fill="#a0aec0"/>
+    <polygon points="3,-6 0,0 6,0" fill="#e94560"/>
+    <rect x="0" y="24" width="6" height="4" rx="1" fill="#718096"/>
+  </g>
+
+  <!-- Code brackets representing automation -->
+  <g fill="none" stroke="#e94560" stroke-width="2" stroke-linecap="round" opacity="0.7">
+    <!-- Left bracket -->
+    <path d="M38 80 L30 100 L38 120"/>
+    <!-- Right bracket -->
+    <path d="M162 80 L170 100 L162 120"/>
+  </g>
+
+  <!-- Subtle connection lines (representing WebSocket) -->
+  <g stroke="#e94560" stroke-width="1" opacity="0.4" stroke-dasharray="2,2">
+    <line x1="45" y1="145" x2="65" y2="160"/>
+    <line x1="155" y1="145" x2="135" y2="160"/>
+  </g>
+
+  <!-- Bottom accent text area -->
+  <text x="100" y="172"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="11"
+        font-weight="600"
+        fill="#a0aec0"
+        text-anchor="middle"
+        letter-spacing="1">
+    PLAYWRITER
+  </text>
+</svg>

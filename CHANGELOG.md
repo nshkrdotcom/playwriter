@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-02-03
+
+### Changed
+- **Complete Architecture Redesign**: Rebuilt from the ground up with clean, modular architecture
+- **New Dependency**: Now built on `playwright_ex` (~> 0.3.2) instead of the alpha playwright library
+- **Transport Abstraction**: Introduced `Playwriter.Transport.Behaviour` with Local and Remote implementations
+- **Session Management**: New `Playwriter.Browser.Session` GenServer for browser lifecycle management
+
+### Added
+- **Transport Layer**:
+  - `Playwriter.Transport.Local` - Wraps playwright_ex for local browser automation
+  - `Playwriter.Transport.Remote` - WebSocket transport for Windows Playwright server connection
+  - `Playwriter.Transport` - Factory module with auto-detection of best transport
+- **Server Discovery**: `Playwriter.Server.Discovery` for automatic WSL-to-Windows server detection
+- **Health Checks**: `Playwriter.Server.Health` for server availability monitoring
+- **New Public API**:
+  - `Playwriter.with_browser/2` - Composable browser session with automatic cleanup
+  - `Playwriter.fetch_html/2` - Convenience function for HTML fetching
+  - `Playwriter.screenshot/2` - Convenience function for screenshots
+  - `Playwriter.goto/3`, `Playwriter.content/1`, `Playwriter.click/3`, `Playwriter.fill/4` - Context-based operations
+- **Windows Server Scripts**: Simplified PowerShell and Node.js scripts in `priv/scripts/`
+- **Working Examples**: `examples/*.exs` with real runnable examples
+- **Test Suite**: Full TDD test suite using Supertester patterns with 47 tests
+
+### Removed
+- Old `Playwriter.Fetcher` module (replaced by Session)
+- Old `Playwriter.WindowsBrowserAdapter` (replaced by Transport.Remote)
+- Old `Playwriter.WindowsBrowserDirect` (experimental, removed)
+- Old `Playwriter.CLI` (simplified, will be re-added later)
+- Dependency on alpha `playwright` library
+
+### Documentation
+- **Complete Documentation Overhaul**: Professional guide system with 7 comprehensive guides
+  - Getting Started guide
+  - Architecture overview
+  - Transport Layer documentation
+  - WSL-Windows Integration guide
+  - Function Reference
+  - Examples with real-world patterns
+  - Troubleshooting guide
+- **New Logo**: Professional hexagonal SVG logo in `assets/playwriter.svg`
+- **Revamped README**: Cohesive user story focused on the WSL-to-Windows use case
+- **HexDocs Configuration**: Grouped modules, guide hierarchy, and logo integration
+
+### Cleanup
+- Removed 44 unused files from root directory (debug scripts, test scripts, old docs)
+- Clean root structure: only LICENSE, CHANGELOG.md, README.md remain as docs
+- All development scripts moved to `priv/scripts/`
+
+### Technical
+- Zero compiler warnings
+- Credo strict: no issues
+- Dialyzer clean
+- All unit tests passing (47 tests)
+
 ## [0.0.2] - 2025-01-05
 
 ### Added

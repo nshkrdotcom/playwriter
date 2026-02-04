@@ -1,32 +1,33 @@
 defmodule Playwriter.MixProject do
   use Mix.Project
 
-  @version "0.0.2"
+  @version "0.1.0"
   @source_url "https://github.com/nshkrdotcom/playwriter"
 
   def project do
     [
       app: :playwriter,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.15",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      escript: [main_module: Playwriter.CLI],
+      aliases: aliases(),
 
-      # Hex package configuration
+      # Dialyzer
+      dialyzer: [
+        plt_file: {:no_warn, "priv/plts/project.plt"},
+        plt_add_apps: [:mix, :ex_unit]
+      ],
+
+      # Hex
       package: package(),
       description: description(),
 
-      # Documentation
+      # Docs
       name: "Playwriter",
       source_url: @source_url,
-      homepage_url: @source_url,
-      docs: docs(),
-
-      # Build tools
-      preferred_cli_env: [
-        "hex.publish": :dev
-      ]
+      docs: docs()
     ]
   end
 
@@ -36,124 +37,88 @@ defmodule Playwriter.MixProject do
     ]
   end
 
-  defp description do
-    """
-    Cross-platform browser automation for Elixir with advanced WSL-to-Windows integration.
-    Features headed browser support, Chrome profile integration, and WebSocket-based 
-    remote browser control for seamless automation across platforms.
-    """
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
+  defp deps do
+    [
+      # Core - using playwright_ex
+      {:playwright_ex, "~> 0.3.2"},
+      {:nimble_options, "~> 1.1"},
+      {:websockex, "~> 0.4.3"},
+      {:jason, "~> 1.4"},
+
+      # Testing
+      {:supertester, "~> 0.5.1", only: :test},
+      {:mox, "~> 1.1", only: :test},
+
+      # Development
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  defp aliases do
+    [
+      setup: ["deps.get", "deps.compile"],
+      check: [
+        "format --check-formatted",
+        "credo --strict",
+        "compile --warnings-as-errors",
+        "dialyzer",
+        "test"
+      ],
+      "test.integration": ["test --include integration"],
+      "test.windows": ["test --include requires_windows_server"]
+    ]
   end
 
   defp package do
     [
       name: "playwriter",
-      files: [
-        "lib",
-        "mix.exs",
-        "README.md",
-        "CHANGELOG.md",
-        "LICENSE",
-        # Essential scripts for Windows integration
-        "start_true_headed_server.sh",
-        "kill_playwright.ps1",
-        "list_chrome_profiles.ps1",
-        "start_chromium.ps1"
-      ],
+      files: ~w(lib priv .formatter.exs mix.exs README.md LICENSE CHANGELOG.md),
       maintainers: ["NSHkr"],
       licenses: ["MIT"],
-      links: %{
-        "GitHub" => @source_url,
-        "Documentation" => "https://hexdocs.pm/playwriter"
-      },
-      exclude_patterns: [
-        # Development and debug files
-        "debug_*",
-        "test_*",
-        "check_*",
-        "simple_*",
-        # Deprecated scripts
-        "start_headed_server.sh",
-        "start_windows_playwright_server.sh",
-        "start_headed_server_3334.ps1",
-        "custom_headed_server.js",
-        "playwright_server_manager.ps1",
-        "manual_*.md",
-        # Build artifacts
-        "_build",
-        "deps"
-      ]
+      links: %{"GitHub" => @source_url}
     ]
+  end
+
+  defp description do
+    "Elixir browser automation with WSL-to-Windows support. Control visible Windows browsers from WSL."
   end
 
   defp docs do
     [
       main: "readme",
       source_ref: "v#{@version}",
-      source_url: @source_url,
+      logo: "assets/playwriter.svg",
+      assets: %{"assets" => "assets"},
       extras: [
         "README.md",
         "CHANGELOG.md",
-        "diagrams.md"
+        "LICENSE",
+        {"guides/getting-started.md", title: "Getting Started"},
+        {"guides/architecture.md", title: "Architecture"},
+        {"guides/transports.md", title: "Transport Layer"},
+        {"guides/wsl-windows.md", title: "WSL-Windows Integration"},
+        {"guides/functions.md", title: "Function Reference"},
+        {"guides/examples.md", title: "Examples"},
+        {"guides/troubleshooting.md", title: "Troubleshooting"}
+      ],
+      groups_for_extras: [
+        Guides: ~r/guides\/.*/
       ],
       groups_for_modules: [
-        Core: [Playwriter, Playwriter.Fetcher],
-        CLI: [Playwriter.CLI],
-        "Windows Integration": [
-          Playwriter.WindowsBrowserAdapter,
-          Playwriter.WindowsBrowserDirect
-        ]
-      ],
-      before_closing_head_tag: &before_closing_head_tag/1,
-      before_closing_body_tag: &before_closing_body_tag/1
-    ]
-  end
-
-  defp before_closing_head_tag(:html) do
-    """
-    <script defer src="https://cdn.jsdelivr.net/npm/mermaid@10.2.3/dist/mermaid.min.js"></script>
-    <script>
-      let initialized = false;
-
-      window.addEventListener("exdoc:loaded", () => {
-        if (!initialized) {
-          mermaid.initialize({
-            startOnLoad: false,
-            theme: document.body.className.includes("dark") ? "dark" : "default"
-          });
-          initialized = true;
-        }
-
-        let id = 0;
-        for (const codeEl of document.querySelectorAll("pre code.mermaid")) {
-          const preEl = codeEl.parentElement;
-          const graphDefinition = codeEl.textContent;
-          const graphEl = document.createElement("div");
-          const graphId = "mermaid-graph-" + id++;
-          mermaid.render(graphId, graphDefinition).then(({svg, bindFunctions}) => {
-            graphEl.innerHTML = svg;
-            bindFunctions?.(graphEl);
-            preEl.insertAdjacentElement("afterend", graphEl);
-            preEl.remove();
-          });
-        }
-      });
-    </script>
-    """
-  end
-
-  defp before_closing_head_tag(:epub), do: ""
-
-  defp before_closing_body_tag(:html), do: ""
-
-  defp before_closing_body_tag(:epub), do: ""
-
-  defp deps do
-    [
-      # Core dependencies
-      {:playwright, "~> 1.49.1-alpha.2"},
-
-      # Documentation
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+        "Public API": [Playwriter],
+        "Browser Session": [Playwriter.Browser.Session],
+        "Transport Layer": [
+          Playwriter.Transport.Behaviour,
+          Playwriter.Transport.Local,
+          Playwriter.Transport.Remote
+        ],
+        "Server Discovery": [Playwriter.Server.Discovery]
+      ]
     ]
   end
 end

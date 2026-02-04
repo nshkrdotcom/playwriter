@@ -1,199 +1,240 @@
 defmodule Playwriter do
-  @version "0.0.1"
-
   @moduledoc """
-  Cross-platform browser automation for Elixir with advanced WSL-to-Windows integration.
+  Cross-platform browser automation with WSL-to-Windows support.
 
-  Playwriter provides HTML fetching and web automation capabilities using Playwright,
-  with special support for controlling Windows browsers from WSL environments.
+  Playwriter provides a simple, composable API for browser automation,
+  with special support for running in WSL while controlling a visible
+  browser on Windows.
 
-  ## Features
+  ## Quick Start
 
-  - **Local Browser Automation**: Standard Playwright automation in headless/headed modes
-  - **Cross-Platform Integration**: WSL-to-Windows browser control via WebSocket
-  - **Windows Browser Support**: Use Windows Chrome/Chromium with existing profiles
-  - **Headed Browser Support**: Visible browser windows for debugging and development
-  - **Chrome Profile Integration**: Support for existing Chrome user profiles and data
-
-  ## Basic Usage
-
-      # Simple HTML fetching
+      # Fetch HTML from a URL (headless)
       {:ok, html} = Playwriter.fetch_html("https://example.com")
 
-      # With custom options
-      opts = %{headless: false, use_windows_browser: true}
-      {:ok, html} = Playwriter.Fetcher.fetch_html("https://google.com", opts)
+      # Fetch with visible browser on Windows
+      {:ok, html} = Playwriter.fetch_html("https://example.com",
+        mode: :remote,
+        ws_endpoint: "ws://localhost:3337/"
+      )
 
-  ## CLI Usage
+      # Take a screenshot
+      {:ok, png_data} = Playwriter.screenshot("https://example.com")
+      File.write!("screenshot.png", png_data)
 
-      # Local browser automation
-      ./playwriter https://example.com
+      # Full control with session
+      {:ok, result} = Playwriter.with_browser(headless: true, fn ctx ->
+        Playwriter.goto(ctx, "https://example.com")
+        Playwriter.click(ctx, "button.accept")
+        Playwriter.content(ctx)
+      end)
 
-      # Windows browser integration
-      ./playwriter --windows-browser https://google.com
+  ## Transport Modes
 
-      # List Chrome profiles
-      ./playwriter --list-profiles
+  - `:local` - Uses playwright_ex with local browser (default)
+  - `:remote` - Connects to a Playwright server via WebSocket
+  - `:auto` - Auto-detects best transport
 
-  ## Windows Integration
+  ## WSL-to-Windows Integration
 
-  For WSL-to-Windows browser automation:
+  To use a visible browser from WSL:
 
-  1. Start the headed browser server:
-     ```bash
-     ./start_true_headed_server.sh
-     ```
+  1. Start the Playwright server on Windows:
 
-  2. Use Windows browsers from Elixir:
-     ```bash
-     ./playwriter --windows-browser https://example.com
-     ```
+         powershell.exe -File scripts/start_server.ps1
 
-  See the [README](https://github.com/nshkrdotcom/playwriter#readme) for detailed setup instructions.
+  2. Connect from your Elixir code:
 
-  ## Author
-
-  Created by [NSHkr](https://github.com/nshkrdotcom)
-
-  ## Links
-
-  - **Repository**: https://github.com/nshkrdotcom/playwriter
-  - **Hex Package**: https://hex.pm/packages/playwriter
-  - **Documentation**: https://hexdocs.pm/playwriter
+         Playwriter.fetch_html("https://example.com",
+           mode: :remote,
+           ws_endpoint: "ws://localhost:3337/"
+         )
   """
 
+  alias Playwriter.Browser.Session
+
+  @type context :: %{session: pid(), page: String.t()}
+  @type result :: {:ok, term()} | {:error, term()}
+
   @doc """
-  Execute a function with a configured browser page.
+  Execute a function with a browser session.
 
-  This is the main entry point for browser operations. It handles all the complex
-  browser setup (including Windows integration) and provides a configured page
-  to your function.
-
-  ## Parameters
-
-  - `opts` - Browser configuration options (see below)
-  - `fun` - Function that receives a configured page and returns a result
+  The function receives a context map with `:session` and `:page` keys.
+  Session and page are automatically created and cleaned up.
 
   ## Options
 
-  - `:use_windows_browser` - Use Windows browser via WebSocket (default: false)
-  - `:browser_type` - Browser type (:chromium, :firefox, :webkit)
-  - `:headless` - Run in headless mode (default: true)
-  - `:chrome_profile` - Chrome profile name for Windows browsers
-  - `:cookies` - List of cookies to set
-  - `:headers` - Headers to set
-  - `:ws_endpoint` - Explicit WebSocket endpoint for remote browsers
-
-  ## Returns
-
-  - `{:ok, result}` - Success with result from your function
-  - `{:error, reason}` - Error with reason
+  - `:mode` - `:local`, `:remote`, or `:auto` (default: `:auto`)
+  - `:ws_endpoint` - WebSocket URL for remote mode
+  - `:headless` - Run browser in headless mode (default: true)
+  - `:browser_type` - `:chromium`, `:firefox`, or `:webkit` (default: `:chromium`)
 
   ## Examples
 
-      # Basic HTML fetching
-      {:ok, html} = Playwriter.with_browser(%{}, fn page ->
-        Playwright.Page.goto(page, "https://example.com")
-        Playwright.Page.content(page)
+      {:ok, html} = Playwriter.with_browser(headless: true, fn ctx ->
+        Playwriter.goto(ctx, "https://example.com")
+        Playwriter.content(ctx)
       end)
 
-      # Take a screenshot
-      {:ok, _} = Playwriter.with_browser(%{}, fn page ->
-        Playwright.Page.goto(page, "https://example.com")
-        Playwright.Page.screenshot(page, %{path: "screenshot.png"})
+      # With visible Windows browser
+      {:ok, html} = Playwriter.with_browser(mode: :remote, fn ctx ->
+        Playwriter.goto(ctx, "https://example.com")
+        Playwriter.click(ctx, "#accept-cookies")
+        Playwriter.content(ctx)
       end)
-
-      # Windows browser with profile
-      {:ok, html} = Playwriter.with_browser(%{
-        use_windows_browser: true,
-        chrome_profile: "Profile 1"
-      }, fn page ->
-        Playwright.Page.goto(page, "https://example.com")
-        Playwright.Page.content(page)
-      end)
-
   """
-  def with_browser(opts \\ %{}, fun) do
-    Playwriter.Fetcher.with_browser(opts, fun)
+  @spec with_browser(keyword(), (context() -> term())) :: result()
+  def with_browser(opts \\ [], fun) do
+    with {:ok, session} <- Session.start_link(opts),
+         {:ok, page} <- Session.new_page(session) do
+      try do
+        context = %{session: session, page: page}
+        result = fun.(context)
+        {:ok, result}
+      rescue
+        error ->
+          {:error, error}
+      after
+        Session.close(session)
+      end
+    end
   end
 
   @doc """
-  Fetch HTML content from a URL using Playwright.
+  Fetch HTML content from a URL.
 
-  This is a convenience function that uses `with_browser/2` internally.
+  This is a convenience wrapper around `with_browser/2`.
 
-  ## Parameters
+  ## Options
 
-  - `url` - The URL to fetch HTML from
-  - `opts` - Browser configuration options (see `with_browser/2`)
+  All options from `with_browser/2` plus:
 
-  ## Returns
-
-  - `{:ok, html}` - Success with HTML content as binary
-  - `{:error, reason}` - Error with reason
+  - `:timeout` - Navigation timeout in ms (default: 30000)
+  - `:wait_until` - When to consider navigation complete
 
   ## Examples
 
-      # Basic usage
       {:ok, html} = Playwriter.fetch_html("https://example.com")
 
-      # With Windows browser
-      {:ok, html} = Playwriter.fetch_html("https://example.com", %{
-        use_windows_browser: true,
-        chrome_profile: "Default"
-      })
-
+      {:ok, html} = Playwriter.fetch_html("https://example.com",
+        mode: :remote,
+        ws_endpoint: "ws://localhost:3337/"
+      )
   """
-  def fetch_html(url, opts \\ %{}) do
-    with_browser(opts, fn page ->
-      Playwright.Page.goto(page, url)
-      Playwright.Page.content(page)
+  @spec fetch_html(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
+  def fetch_html(url, opts \\ []) do
+    with_browser(opts, fn ctx ->
+      with :ok <- goto(ctx, url, opts),
+           {:ok, html} <- content(ctx) do
+        html
+      else
+        error -> throw(error)
+      end
     end)
+  catch
+    {:error, _} = error -> error
   end
 
   @doc """
-  Take a screenshot of a URL using Playwright.
+  Take a screenshot of a URL.
 
-  This is a convenience function that uses `with_browser/2` internally.
+  Returns the screenshot as PNG binary data.
 
-  ## Parameters
+  ## Options
 
-  - `url` - The URL to take a screenshot of
-  - `path` - File path to save the screenshot
-  - `opts` - Browser configuration options (see `with_browser/2`)
+  All options from `with_browser/2` plus:
 
-  ## Returns
-
-  - `{:ok, binary}` - Success with screenshot data
-  - `{:error, reason}` - Error with reason
+  - `:full_page` - Capture entire scrollable page (default: false)
+  - `:omit_background` - Transparent background (default: false)
 
   ## Examples
 
-      # Basic usage
-      {:ok, _} = Playwriter.screenshot("https://example.com", "screenshot.png")
+      {:ok, png} = Playwriter.screenshot("https://example.com")
+      File.write!("screenshot.png", png)
 
-      # With Windows browser
-      {:ok, _} = Playwriter.screenshot("https://example.com", "screenshot.png", %{
-        use_windows_browser: true,
-        headless: false
-      })
-
+      {:ok, png} = Playwriter.screenshot("https://example.com", full_page: true)
   """
-  def screenshot(url, path, opts \\ %{}) do
-    with_browser(opts, fn page ->
-      Playwright.Page.goto(page, url)
-      Playwright.Page.screenshot(page, %{path: path})
+  @spec screenshot(String.t(), keyword()) :: {:ok, binary()} | {:error, term()}
+  def screenshot(url, opts \\ []) do
+    with_browser(opts, fn ctx ->
+      with :ok <- goto(ctx, url, opts),
+           {:ok, data} <- Session.screenshot(ctx.session, ctx.page, opts) do
+        data
+      else
+        error -> throw(error)
+      end
     end)
+  catch
+    {:error, _} = error -> error
+  end
+
+  # Context-based operations (used inside with_browser callback)
+
+  @doc """
+  Navigate to a URL.
+
+  Use inside `with_browser/2` callback.
+
+  ## Examples
+
+      Playwriter.with_browser(fn ctx ->
+        :ok = Playwriter.goto(ctx, "https://example.com")
+        # ...
+      end)
+  """
+  @spec goto(context(), String.t(), keyword()) :: :ok | {:error, term()}
+  def goto(ctx, url, opts \\ []) do
+    Session.goto(ctx.session, ctx.page, url, opts)
   end
 
   @doc """
-  Returns the current version of Playwriter.
+  Get page HTML content.
+
+  Use inside `with_browser/2` callback.
+  """
+  @spec content(context()) :: {:ok, String.t()} | {:error, term()}
+  def content(ctx) do
+    Session.content(ctx.session, ctx.page)
+  end
+
+  @doc """
+  Click an element.
+
+  Use inside `with_browser/2` callback.
 
   ## Examples
 
-      iex> Playwriter.version()
-      "0.0.1"
-
+      Playwriter.with_browser(fn ctx ->
+        Playwriter.goto(ctx, "https://example.com")
+        :ok = Playwriter.click(ctx, "button.submit")
+      end)
   """
-  def version, do: @version
+  @spec click(context(), String.t(), keyword()) :: :ok | {:error, term()}
+  def click(ctx, selector, opts \\ []) do
+    Session.click(ctx.session, ctx.page, selector, opts)
+  end
+
+  @doc """
+  Fill an input field.
+
+  Use inside `with_browser/2` callback.
+
+  ## Examples
+
+      Playwriter.with_browser(fn ctx ->
+        Playwriter.goto(ctx, "https://example.com/login")
+        :ok = Playwriter.fill(ctx, "input[name=email]", "test@example.com")
+        :ok = Playwriter.fill(ctx, "input[name=password]", "secret123")
+        :ok = Playwriter.click(ctx, "button[type=submit]")
+      end)
+  """
+  @spec fill(context(), String.t(), String.t(), keyword()) :: :ok | {:error, term()}
+  def fill(ctx, selector, value, opts \\ []) do
+    Session.fill(ctx.session, ctx.page, selector, value, opts)
+  end
+
+  @doc """
+  Returns the library version.
+  """
+  @spec version() :: String.t()
+  def version, do: "0.1.0"
 end
