@@ -7,12 +7,8 @@
 #   mix run examples/windows_browser.exs
 #
 # Prerequisites:
-#   Start the Windows Playwright server first:
-#     powershell.exe -File priv/scripts/start_server.ps1
-#
-# Options:
-#   --endpoint, -e   Specify WebSocket endpoint (default: auto-discover)
-#   --headless, -h   Run headless instead of visible (default: false)
+#   Install Playwright on Windows first:
+#     powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
 #
 # For local-only automation, use the other examples with --local flag.
 
@@ -26,24 +22,20 @@ IO.puts("")
 IO.puts("This will open a VISIBLE browser window on Windows!")
 IO.puts("")
 
-# Parse args - force remote mode for this example
+# Parse args - force windows mode for this example
 {_requested_mode, opts} = Support.parse_args(System.argv())
 
-case Support.detect_mode(:remote, opts) do
-  {:ok, :remote, playwriter_opts} ->
-    endpoint = playwriter_opts[:ws_endpoint]
-    IO.puts("Connected to server: #{endpoint}")
+case Support.detect_mode(:windows, opts) do
+  {:ok, :windows, playwriter_opts} ->
+    IO.puts("Using Windows mode (PowerShell + Node.js)")
     IO.puts("")
 
     IO.puts("Opening browser and navigating to example.com...")
     IO.puts("Watch your Windows desktop!")
     IO.puts("")
 
-    # Force visible browser for this demo
-    visible_opts = Keyword.put(playwriter_opts, :headless, false)
-
     result =
-      Playwriter.with_browser(visible_opts, fn ctx ->
+      Playwriter.with_browser(playwriter_opts, fn ctx ->
         IO.puts("1. Navigating to example.com...")
         :ok = Playwriter.goto(ctx, "https://example.com")
 
@@ -51,7 +43,7 @@ case Support.detect_mode(:remote, opts) do
         Process.sleep(2000)
 
         IO.puts("3. Taking screenshot...")
-        {:ok, png} = Playwriter.screenshot(ctx)
+        {:ok, png} = Playwriter.take_screenshot(ctx)
         File.write!("windows_screenshot.png", png)
         IO.puts("   Saved to windows_screenshot.png")
 
@@ -66,33 +58,45 @@ case Support.detect_mode(:remote, opts) do
       {:ok, html} ->
         IO.puts("")
         IO.puts("Success!")
-        IO.puts("Fetched #{String.length(html)} bytes")
+        IO.puts("Fetched #{byte_size(html)} bytes")
         IO.puts("Screenshot saved to windows_screenshot.png")
         IO.puts("")
         IO.puts("The browser window should have been visible on Windows!")
 
       {:error, reason} ->
-        Support.print_runtime_error(reason, :remote)
+        Support.print_runtime_error(reason, :windows)
         System.halt(1)
     end
 
-  {:error, :remote_unavailable, _reason} ->
+  {:error, :windows_unavailable, reason} ->
     IO.puts("")
     IO.puts("=" |> String.duplicate(60))
-    IO.puts("ERROR: No Windows Playwright server found")
+    IO.puts("ERROR: Windows mode not available")
     IO.puts("=" |> String.duplicate(60))
     IO.puts("")
-    IO.puts("Start the server on Windows first:")
-    IO.puts("")
-    IO.puts("    powershell.exe -File priv/scripts/start_server.ps1")
-    IO.puts("")
-    IO.puts("Or if the server is running on a different endpoint:")
-    IO.puts("")
-    IO.puts("    mix run examples/windows_browser.exs --endpoint ws://localhost:3337/")
-    IO.puts("")
-    IO.puts("For local-only automation (no Windows), use:")
-    IO.puts("")
-    IO.puts("    mix run examples/fetch_html.exs --local")
+
+    case reason do
+      :not_wsl ->
+        IO.puts("This example requires running from WSL.")
+        IO.puts("")
+        IO.puts("Use local mode instead:")
+        IO.puts("")
+        IO.puts("    mix run examples/fetch_html.exs --local")
+
+      :playwright_not_installed_on_windows ->
+        IO.puts("Playwright is not installed on Windows.")
+        IO.puts("")
+        IO.puts("Run the setup script first:")
+        IO.puts("")
+
+        IO.puts(
+          "    powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install"
+        )
+
+        IO.puts("")
+        IO.puts("Then run this example again.")
+    end
+
     IO.puts("")
     System.halt(1)
 

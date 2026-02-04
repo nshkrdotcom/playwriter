@@ -21,7 +21,7 @@ defmodule Playwriter.Browser.Session do
   require Logger
 
   alias Playwriter.Transport
-  alias Playwriter.Transport.{Local, Remote}
+  alias Playwriter.Transport.{Local, Remote, WindowsCmd}
 
   @type page_info :: %{
           page_guid: String.t(),
@@ -79,7 +79,7 @@ defmodule Playwriter.Browser.Session do
   """
   @spec new_context(GenServer.server(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def new_context(session, opts \\ []) do
-    GenServer.call(session, {:new_context, opts})
+    GenServer.call(session, {:new_context, opts}, 35_000)
   end
 
   @doc """
@@ -101,7 +101,7 @@ defmodule Playwriter.Browser.Session do
   """
   @spec content(GenServer.server(), String.t()) :: {:ok, String.t()} | {:error, term()}
   def content(session, page_id) do
-    GenServer.call(session, {:content, page_id})
+    GenServer.call(session, {:content, page_id}, 35_000)
   end
 
   @doc """
@@ -115,7 +115,7 @@ defmodule Playwriter.Browser.Session do
   @spec screenshot(GenServer.server(), String.t(), keyword()) ::
           {:ok, binary()} | {:error, term()}
   def screenshot(session, page_id, opts \\ []) do
-    GenServer.call(session, {:screenshot, page_id, opts})
+    GenServer.call(session, {:screenshot, page_id, opts}, 35_000)
   end
 
   @doc """
@@ -128,7 +128,7 @@ defmodule Playwriter.Browser.Session do
   @spec click(GenServer.server(), String.t(), String.t(), keyword()) ::
           :ok | {:error, term()}
   def click(session, page_id, selector, opts \\ []) do
-    GenServer.call(session, {:click, page_id, selector, opts})
+    GenServer.call(session, {:click, page_id, selector, opts}, 35_000)
   end
 
   @doc """
@@ -141,7 +141,7 @@ defmodule Playwriter.Browser.Session do
   @spec fill(GenServer.server(), String.t(), String.t(), String.t(), keyword()) ::
           :ok | {:error, term()}
   def fill(session, page_id, selector, value, opts \\ []) do
-    GenServer.call(session, {:fill, page_id, selector, value, opts})
+    GenServer.call(session, {:fill, page_id, selector, value, opts}, 35_000)
   end
 
   @doc """
@@ -149,7 +149,7 @@ defmodule Playwriter.Browser.Session do
   """
   @spec close_page(GenServer.server(), String.t()) :: :ok | {:error, term()}
   def close_page(session, page_id) do
-    GenServer.call(session, {:close_page, page_id})
+    GenServer.call(session, {:close_page, page_id}, 10_000)
   end
 
   @doc """
@@ -300,6 +300,7 @@ defmodule Playwriter.Browser.Session do
 
   defp determine_mode(opts) do
     cond do
+      opts[:mode] == :windows -> :windows
       opts[:mode] == :remote -> :remote
       opts[:mode] == :local -> :local
       opts[:ws_endpoint] -> :remote
@@ -309,6 +310,7 @@ defmodule Playwriter.Browser.Session do
 
   defp transport_module_for(:local), do: Local
   defp transport_module_for(:remote), do: Remote
+  defp transport_module_for(:windows), do: WindowsCmd
 
   defp start_transport(:local, opts) do
     Local.start_link(opts)
@@ -321,6 +323,10 @@ defmodule Playwriter.Browser.Session do
       nil -> {:error, :no_endpoint}
       ep -> Remote.start_link(Keyword.put(opts, :ws_endpoint, ep))
     end
+  end
+
+  defp start_transport(:windows, opts) do
+    WindowsCmd.start_link(opts)
   end
 
   defp discover_endpoint(opts) do
@@ -338,8 +344,14 @@ defmodule Playwriter.Browser.Session do
     Local.launch_browser(transport, browser_type, browser_opts)
   end
 
-  defp launch_or_get_browser(transport, Remote, _opts) do
-    Remote.get_browser(transport)
+  defp launch_or_get_browser(_transport, Remote, _opts) do
+    # Remote transport is not supported - will never reach here since start_link fails
+    {:error, :not_supported}
+  end
+
+  defp launch_or_get_browser(transport, WindowsCmd, opts) do
+    browser_opts = Keyword.take(opts, [:headless])
+    WindowsCmd.launch_browser(transport, :chromium, browser_opts)
   end
 
   defp create_context(state, opts) do
@@ -425,8 +437,8 @@ defmodule Playwriter.Browser.Session do
       call_transport(state, :close_context, [guid])
     end)
 
-    # Close browser (local only)
-    if state.transport_module == Local and state.browser_guid do
+    # Close browser (local and windows modes)
+    if state.transport_module in [Local, WindowsCmd] and state.browser_guid do
       call_transport(state, :close_browser, [state.browser_guid])
     end
 

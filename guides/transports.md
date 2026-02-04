@@ -1,6 +1,6 @@
 # Transport Layer
 
-Playwriter's transport layer abstracts the communication between your Elixir application and the Playwright browser automation engine. This design enables both local and remote browser control through a unified API.
+Playwriter's transport layer abstracts the communication between your Elixir application and the Playwright browser automation engine. This design enables local, Windows, and remote browser control through a unified API.
 
 ## Transport Abstraction
 
@@ -59,99 +59,103 @@ Playwriter.fetch_html("https://example.com", mode: :local)
 - **Lower latency** - No network overhead
 - **Simpler setup** - No server to run
 - **Best for CI/CD** - Headless automation
+- **Multiple browsers** - Chromium, Firefox, WebKit
 
 ### Limitations
 
 - Browser runs on the same machine as your Elixir app
 - In WSL, headless-only (no visible window on Windows)
 
-## Remote Transport
+## Windows Transport
 
-The remote transport (`Playwriter.Transport.Remote`) connects via WebSocket to a Playwright server running elsewhere.
+The Windows transport (`Playwriter.Transport.WindowsCmd`) runs Playwright directly on Windows via PowerShell, controlled from WSL.
 
 ### How It Works
 
 ```
-Your Application (WSL/Linux/Container)
+Your Application (WSL)
       │
       ▼
-Remote Transport (GenServer)
+Windows Transport (GenServer)
       │
-      ▼ WebSocket
+      ▼ Erlang Port (stdin/stdout)
       │
-Playwright Server (Windows/Remote Host)
+PowerShell.exe
       │
       ▼
-Browser (visible on remote desktop)
+Node.js + Playwright (on Windows)
+      │
+      ▼
+Browser (visible on Windows desktop)
 ```
 
 ### Usage
 
 ```elixir
-# Auto-discover server (WSL to Windows)
-Playwriter.fetch_html("https://example.com", mode: :remote)
+# Visible browser on Windows
+Playwriter.fetch_html("https://example.com", mode: :windows)
 
-# Explicit endpoint
-Playwriter.fetch_html("https://example.com",
-  mode: :remote,
-  ws_endpoint: "ws://192.168.1.100:3337/"
-)
+# Interactive session
+Playwriter.with_browser([mode: :windows], fn ctx ->
+  :ok = Playwriter.goto(ctx, "https://example.com")
+  :ok = Playwriter.click(ctx, "button")
+  Playwriter.content(ctx)
+end)
 ```
 
-### Server Discovery
+### Setup
 
-When using `mode: :remote` without an explicit `ws_endpoint`, Playwriter automatically searches for a running Playwright server:
+One-time installation:
 
-1. **Ports scanned**: 3337, 3336, 3335, 3334, 9222
-2. **Hosts tried**:
-   - `localhost`
-   - WSL gateway IP (from `/etc/resolv.conf`)
-   - `host.docker.internal`
-
-```elixir
-# Manual discovery
-{:ok, endpoint} = Playwriter.Server.Discovery.discover()
-# => {:ok, "ws://172.25.160.1:3337/"}
-```
-
-### Starting the Server
-
-On Windows, start the Playwright server:
-
-```powershell
-# From PowerShell
-cd path/to/playwriter
-powershell.exe -File priv/scripts/start_server.ps1
-```
-
-Or manually:
-
-```powershell
-npx playwright run-server --port 3337
+```bash
+powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
 ```
 
 ### Advantages
 
 - **Visible browsers** - See automation happening in real-time
-- **Cross-platform** - Control Windows browsers from WSL/Linux
-- **Distributed** - Browser can run on dedicated machines
+- **No network issues** - Bypasses WSL2 Hyper-V firewall completely
+- **No server required** - Just works after npm install
+- **Best for WSL development** - The recommended mode for WSL users
 
 ### Limitations
 
-- Requires running a Playwright server
-- Network latency between client and server
-- Server must be accessible from client
+- Only works from WSL to Windows
+- Currently only supports Chromium
+- Slightly higher startup latency than local mode
+
+## Remote Transport
+
+The remote transport (`Playwriter.Transport.Remote`) is designed for connecting via WebSocket to a Playwright server running elsewhere.
+
+### Current Status
+
+**Note:** The remote transport is currently non-functional from WSL2 due to Hyper-V firewall blocking WebSocket connections to Windows. Use `:windows` mode instead for WSL-to-Windows automation.
+
+The remote transport returns a helpful error message directing users to `:windows` mode:
+
+```elixir
+{:error, {:not_supported, "Use mode: :windows instead..."}} =
+  Playwriter.fetch_html(url, mode: :remote)
+```
+
+### When Remote Would Be Useful
+
+In non-WSL scenarios where you have network access to a Playwright server:
+- Distributed browser automation across machines
+- Controlling browsers in cloud environments
+- Separating browser execution from application logic
 
 ## Choosing a Transport
 
 | Scenario | Recommended Transport |
 |----------|----------------------|
-| CI/CD pipelines | Local (headless) |
-| Development debugging | Remote (headed) |
-| WSL to Windows | Remote |
-| Docker containers | Local or Remote |
-| Production scraping | Local (headless) |
-| E2E test development | Remote (see browser) |
+| CI/CD pipelines | `:local` (headless) |
+| WSL development | `:windows` |
+| WSL debugging | `:windows` |
+| Docker containers | `:local` |
+| Production scraping | `:local` (headless) |
+| E2E test development | `:windows` (see browser) |
 
 ## Custom Transports
 
@@ -197,29 +201,32 @@ end)
 
 **"playwright_ex driver not found"**
 ```bash
-# Install Playwright browsers
-mix playwright.install
+# Run setup
+mix playwriter.setup
 ```
 
 **"Browser launch failed"**
 ```bash
 # Ensure dependencies are installed
-npx playwright install-deps chromium
+cd deps/playwright/priv/static && npx playwright install-deps chromium
+```
+
+### Windows Transport Issues
+
+**"Timeout waiting for transport to start"**
+- Ensure Node.js is installed on Windows
+- Run the setup script: `powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install`
+
+**"Cannot find module 'playwright'"**
+```powershell
+# On Windows, in PowerShell
+cd $env:TEMP\playwriter-server
+npm install playwright
+npx playwright install chromium
 ```
 
 ### Remote Transport Issues
 
-**"Connection refused"**
-- Ensure the Playwright server is running on Windows
-- Check firewall settings allow the port
-- Verify the endpoint URL
-
-**"Discovery failed"**
-```elixir
-# Check what Discovery finds
-Playwriter.Server.Discovery.discover(timeout: 10_000)
-```
-
-**"WebSocket timeout"**
-- Increase timeout: `Playwriter.fetch_html(url, timeout: 60_000)`
-- Check network connectivity between client and server
+**"not_supported" error**
+- Use `mode: :windows` instead when working from WSL
+- The remote transport doesn't work from WSL2 due to networking restrictions

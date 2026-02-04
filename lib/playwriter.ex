@@ -31,16 +31,24 @@ defmodule Playwriter do
   ## Transport Modes
 
   - `:local` - Uses playwright_ex with local browser (default)
+  - `:windows` - Runs Playwright on Windows via PowerShell (WSL only, no server needed!)
   - `:remote` - Connects to a Playwright server via WebSocket
   - `:auto` - Auto-detects best transport
 
   ## WSL-to-Windows Integration
 
-  To use a visible browser from WSL:
+  **Recommended: Use `:windows` mode** (no server setup required):
+
+      Playwriter.fetch_html("https://example.com", mode: :windows)
+
+  This runs Playwright directly on Windows via PowerShell, bypassing WSL networking.
+  Requires playwright to be installed in `%TEMP%\\playwriter-server` on Windows.
+
+  **Alternative: Remote server mode** (requires running server):
 
   1. Start the Playwright server on Windows:
 
-         powershell.exe -File scripts/start_server.ps1
+         powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1
 
   2. Connect from your Elixir code:
 
@@ -194,6 +202,29 @@ defmodule Playwriter do
   @spec content(context()) :: {:ok, String.t()} | {:error, term()}
   def content(ctx) do
     Session.content(ctx.session, ctx.page)
+  end
+
+  @doc """
+  Take a screenshot of the current page.
+
+  Use inside `with_browser/2` callback.
+
+  ## Options
+
+  - `:full_page` - Capture entire scrollable page (default: false)
+  - `:omit_background` - Transparent background (default: false)
+
+  ## Examples
+
+      Playwriter.with_browser(fn ctx ->
+        Playwriter.goto(ctx, "https://example.com")
+        {:ok, png} = Playwriter.take_screenshot(ctx)
+        File.write!("screenshot.png", png)
+      end)
+  """
+  @spec take_screenshot(context(), keyword()) :: {:ok, binary()} | {:error, term()}
+  def take_screenshot(ctx, opts \\ []) do
+    Session.screenshot(ctx.session, ctx.page, opts)
   end
 
   @doc """

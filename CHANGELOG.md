@@ -8,59 +8,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-02-03
 
 ### Changed
-- **Complete Architecture Redesign**: Rebuilt from the ground up with clean, modular architecture
-- **New Dependency**: Now built on `playwright_ex` (~> 0.3.2) instead of the alpha playwright library
-- **Transport Abstraction**: Introduced `Playwriter.Transport.Behaviour` with Local and Remote implementations
-- **Session Management**: New `Playwriter.Browser.Session` GenServer for browser lifecycle management
+- Complete architecture redesign with clean, modular transport abstraction
+- New dependency: built on playwright_ex (~> 0.3.2) instead of alpha playwright
+- Transport abstraction via Playwriter.Transport.Behaviour
+- Session management via Playwriter.Browser.Session GenServer
+- Remote transport disabled due to WSL2 Hyper-V firewall blocking WebSockets
+- Playwright path changed from deps/playwright_ex to deps/playwright/priv/static
+- mix playwriter.setup now installs to correct playwright dependency location
+- GenServer call timeouts increased throughout for reliability
+- Screenshot handling now properly decodes base64 from playwright_ex
+- Server scripts bind to 0.0.0.0 for WSL2 accessibility
+- PowerShell commands now use -ExecutionPolicy Bypass flag
 
 ### Added
-- **Transport Layer**:
-  - `Playwriter.Transport.Local` - Wraps playwright_ex for local browser automation
-  - `Playwriter.Transport.Remote` - WebSocket transport for Windows Playwright server connection
-  - `Playwriter.Transport` - Factory module with auto-detection of best transport
-- **Server Discovery**: `Playwriter.Server.Discovery` for automatic WSL-to-Windows server detection
-- **Health Checks**: `Playwriter.Server.Health` for server availability monitoring
-- **New Public API**:
-  - `Playwriter.with_browser/2` - Composable browser session with automatic cleanup
-  - `Playwriter.fetch_html/2` - Convenience function for HTML fetching
-  - `Playwriter.screenshot/2` - Convenience function for screenshots
-  - `Playwriter.goto/3`, `Playwriter.content/1`, `Playwriter.click/3`, `Playwriter.fill/4` - Context-based operations
-- **Windows Server Scripts**: Simplified PowerShell and Node.js scripts in `priv/scripts/`
-- **Working Examples**: `examples/*.exs` with real runnable examples
-- **Test Suite**: Full TDD test suite using Supertester patterns with 47 tests
+- WindowsCmd transport (Playwriter.Transport.WindowsCmd):
+  - Runs Playwright directly on Windows via PowerShell stdin/stdout
+  - Bypasses all WSL2 networking and firewall issues
+  - No server setup required, just npm install playwright on Windows
+  - Use with mode: :windows option
+- Transport layer modules:
+  - Playwriter.Transport.Local wraps playwright_ex for local automation
+  - Playwriter.Transport.WindowsCmd for WSL-to-Windows via PowerShell
+  - Playwriter.Transport factory with auto-detection
+- Server discovery and health checks:
+  - Playwriter.Server.Discovery for automatic endpoint detection
+  - Playwriter.Server.Health for availability monitoring
+- Public API functions:
+  - Playwriter.with_browser/2 for composable sessions with cleanup
+  - Playwriter.fetch_html/2, screenshot/2 convenience functions
+  - Playwriter.goto/3, content/1, click/3, fill/4 context operations
+- Windows server scripts in priv/scripts/
+- Working examples in examples/ directory:
+  - fetch_html.exs, screenshot.exs, interaction.exs
+  - windows_browser.exs, windows_mode.exs, test_windows_cmd.exs
+- Test suite with 47 tests using Supertester patterns
+
+### Added Documentation
+- Testing guide (guides/testing.md):
+  - Test categories and tags explained
+  - Running unit, integration, and Windows server tests
+  - Prerequisites for each test type
+  - CI configuration guidance
+  - Writing tests with proper tags
+- Examples README (examples/README.md):
+  - All available examples with descriptions
+  - CLI flags (--local, --remote, --endpoint, --headless)
+  - Mode auto-detection behavior
+  - Writing custom scripts
+  - Troubleshooting tips
+- Complete guide system:
+  - Getting Started, Architecture, Transport Layer
+  - WSL-Windows Integration, Function Reference
+  - Examples, Troubleshooting
+- HexDocs configuration with grouped modules and guide hierarchy
+- Professional hexagonal SVG logo
 
 ### Removed
-- Old `Playwriter.Fetcher` module (replaced by Session)
-- Old `Playwriter.WindowsBrowserAdapter` (replaced by Transport.Remote)
-- Old `Playwriter.WindowsBrowserDirect` (experimental, removed)
-- Old `Playwriter.CLI` (simplified, will be re-added later)
-- Dependency on alpha `playwright` library
+- Old Playwriter.Fetcher module (replaced by Session)
+- Old Playwriter.WindowsBrowserAdapter (replaced by transports)
+- Old Playwriter.WindowsBrowserDirect (experimental)
+- Old Playwriter.CLI (simplified, to be re-added)
+- Dependency on alpha playwright library
+- Remote transport WebSocket implementation (non-functional in WSL2)
 
-### Documentation
-- **Complete Documentation Overhaul**: Professional guide system with 7 comprehensive guides
-  - Getting Started guide
-  - Architecture overview
-  - Transport Layer documentation
-  - WSL-Windows Integration guide
-  - Function Reference
-  - Examples with real-world patterns
-  - Troubleshooting guide
-- **New Logo**: Professional hexagonal SVG logo in `assets/playwriter.svg`
-- **Revamped README**: Cohesive user story focused on the WSL-to-Windows use case
-- **HexDocs Configuration**: Grouped modules, guide hierarchy, and logo integration
+### Fixed
+- Screenshot binary handling with proper base64 decoding
+- Timeout issues in browser operations
+- PowerShell execution policy blocking script execution
+- Server not accepting connections from WSL2
 
 ### Cleanup
-- Removed 44 unused files from root directory (debug scripts, test scripts, old docs)
-- Clean root structure: only LICENSE, CHANGELOG.md, README.md remain as docs
-- All development scripts moved to `priv/scripts/`
+- Removed 44 unused files from root directory
+- Clean root: LICENSE, CHANGELOG.md, README.md only
+- Development scripts consolidated in priv/scripts/
+- Added screenshot.png to .gitignore
 
 ### Technical
 - Zero compiler warnings
 - Credo strict: no issues
 - Dialyzer clean
-- All unit tests passing (47 tests)
+- All unit tests passing
 
-## [0.0.2] - 2025-01-05
+## [0.0.2] - 2025-07-04
 
 ### Added
 - **Architecture Diagrams**: Comprehensive Mermaid diagrams documenting system architecture
@@ -81,7 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Styling**: All Mermaid diagrams now use consistent black font color (#000) for better readability
 - **HexDocs**: Added native Mermaid diagram rendering support with automatic dark/light theme switching
 
-## [0.0.1] - 2025-01-05
+## [0.0.1] - 2025-07-04
 
 ### Added
 

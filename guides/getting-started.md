@@ -22,12 +22,13 @@ mix deps.get
 
 ## Choose Your Mode
 
-Playwriter supports two modes of operation:
+Playwriter supports three modes of operation:
 
 | Mode | Use Case | Setup Required |
 |------|----------|----------------|
 | **Local** | CI/CD, headless scraping, native Linux | `mix playwriter.setup` |
-| **Remote** | WSL-to-Windows, visible browsers, debugging | Windows Playwright server |
+| **Windows** | WSL-to-Windows, visible browsers, debugging | One-time npm install |
+| **Remote** | Distributed automation (non-WSL only) | Playwright server |
 
 ## Quick Start: Local Mode
 
@@ -38,65 +39,45 @@ For headless browser automation on your local machine:
 mix playwriter.setup
 ```
 
-Then run an example:
-
-```bash
-mix run examples/fetch_html.exs --local
-```
-
-Or in your code:
+Then in your code:
 
 ```elixir
 {:ok, html} = Playwriter.fetch_html("https://example.com")
 ```
 
-## Quick Start: Remote Mode (WSL to Windows)
+## Quick Start: Windows Mode (WSL to Windows)
 
-To see browsers on your Windows desktop from WSL:
+**Recommended for WSL users.** See visible browsers on your Windows desktop:
 
-**1. Start the server on Windows:**
-
-```powershell
-powershell.exe -File priv/scripts/start_server.ps1
-```
-
-**2. Run from WSL:**
+**1. One-time setup (installs Playwright on Windows):**
 
 ```bash
-mix run examples/fetch_html.exs --remote
+powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
 ```
 
-Or in your code:
+**2. Use from Elixir:**
 
 ```elixir
-{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :remote)
+{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
 ```
 
 A browser window will open on Windows!
 
 ## Running Examples
 
-All examples support both modes with auto-detection:
-
 ```bash
-# Auto-detect available mode (tries remote first, then local)
-mix run examples/fetch_html.exs
-
-# Force local mode
+# Local mode (headless)
 mix run examples/fetch_html.exs --local
 
-# Force remote mode
-mix run examples/fetch_html.exs --remote
-
-# Specify endpoint for remote
-mix run examples/fetch_html.exs --remote --endpoint ws://localhost:3337/
+# Windows mode (visible browser on Windows)
+mix run examples/windows_mode.exs
 ```
 
 Available examples:
 - `examples/fetch_html.exs` - Fetch HTML content
 - `examples/screenshot.exs` - Take screenshots
 - `examples/interaction.exs` - Form filling and clicking
-- `examples/windows_browser.exs` - WSL-to-Windows demo (remote only)
+- `examples/windows_mode.exs` - WSL-to-Windows demo
 
 ## Setup Commands
 
@@ -113,32 +94,28 @@ mix playwriter.setup --browser firefox
 mix playwriter.setup --browser all
 ```
 
-### Remote Mode Setup
+### Windows Mode Setup
 
-On Windows, you need Node.js and Playwright:
+On Windows, you need Node.js and Playwright installed in `%TEMP%\playwriter-server`:
+
+```bash
+# From WSL - runs setup on Windows
+powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
+```
+
+Or manually on Windows:
 
 ```powershell
 # Install Node.js (if not already installed)
 winget install OpenJS.NodeJS.LTS
 
-# Create server directory
-mkdir C:\playwright-server
-cd C:\playwright-server
+# Create and setup server directory
+cd $env:TEMP
+mkdir playwriter-server
+cd playwriter-server
 npm init -y
 npm install playwright
 npx playwright install chromium
-```
-
-Then start the server:
-
-```powershell
-npx playwright run-server --port 3337
-```
-
-Or use the provided script:
-
-```powershell
-powershell.exe -File priv/scripts/start_server.ps1
 ```
 
 ## Your First Script
@@ -146,19 +123,24 @@ powershell.exe -File priv/scripts/start_server.ps1
 ### Fetching HTML
 
 ```elixir
-# Local mode (default)
+# Local mode (default, headless)
 {:ok, html} = Playwriter.fetch_html("https://example.com")
 
-# Remote mode (visible on Windows)
-{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :remote)
+# Windows mode (visible on Windows desktop)
+{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
 
-IO.puts("Got #{String.length(html)} bytes of HTML")
+IO.puts("Got #{byte_size(html)} bytes of HTML")
 ```
 
 ### Taking Screenshots
 
 ```elixir
+# Local (headless)
 {:ok, png_data} = Playwriter.screenshot("https://example.com")
+File.write!("screenshot.png", png_data)
+
+# Windows (visible)
+{:ok, png_data} = Playwriter.screenshot("https://example.com", mode: :windows)
 File.write!("screenshot.png", png_data)
 ```
 
@@ -167,7 +149,7 @@ File.write!("screenshot.png", png_data)
 For complex workflows, use `with_browser/2`:
 
 ```elixir
-{:ok, result} = Playwriter.with_browser([mode: :remote], fn ctx ->
+{:ok, result} = Playwriter.with_browser([mode: :windows], fn ctx ->
   # Navigate
   :ok = Playwriter.goto(ctx, "https://example.com")
 
@@ -188,9 +170,9 @@ All functions accept options to customize behavior:
 
 ```elixir
 Playwriter.fetch_html("https://example.com",
-  mode: :local,           # :local or :remote
-  headless: false,        # show browser window
-  browser_type: :firefox, # :chromium, :firefox, :webkit
+  mode: :windows,         # :local, :windows, or :remote
+  headless: false,        # show browser window (local mode only)
+  browser_type: :chromium,# :chromium, :firefox, :webkit (local mode)
   timeout: 60_000         # milliseconds
 )
 ```
@@ -205,29 +187,29 @@ Run the setup task:
 mix playwriter.setup
 ```
 
-### "No Playwright server found"
+### "Timeout waiting for transport" (Windows mode)
 
-Start the Windows server:
-
-```powershell
-powershell.exe -File priv/scripts/start_server.ps1
-```
-
-### Examples fail silently
-
-Run with explicit mode to see detailed errors:
+Ensure Playwright is installed on Windows:
 
 ```bash
-mix run examples/fetch_html.exs --local
-# or
-mix run examples/fetch_html.exs --remote
+powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
+```
+
+### "Cannot find module 'playwright'" (Windows mode)
+
+Manually install on Windows:
+
+```powershell
+cd $env:TEMP\playwriter-server
+npm install playwright
+npx playwright install chromium
 ```
 
 ## Next Steps
 
 - [Architecture Overview](architecture.md) - Understand how Playwriter works
 - [Function Reference](functions.md) - Complete function documentation
-- [Transport Layer](transports.md) - Learn about local vs remote transports
-- [WSL-Windows Integration](wsl-windows.md) - Detailed remote mode setup
+- [Transport Layer](transports.md) - Learn about local, windows, and remote transports
+- [WSL-Windows Integration](wsl-windows.md) - Detailed Windows mode setup
 - [Examples](examples.md) - Real-world usage examples
 - [Troubleshooting](troubleshooting.md) - Common issues and fixes

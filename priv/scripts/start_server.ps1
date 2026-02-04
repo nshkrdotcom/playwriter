@@ -43,7 +43,7 @@ const PORT = parseInt(process.argv[2]) || 3337;
 
 async function main() {
   console.log(`Starting Playwright server on port ${PORT}...`);
-  const server = await chromium.launchServer({ headless: false, port: PORT });
+  const server = await chromium.launchServer({ headless: false, port: PORT, host: '0.0.0.0' });
   console.log(`Server running at: ${server.wsEndpoint()}`);
   console.log('Press Ctrl+C to stop');
   process.on('SIGINT', async () => { await server.close(); process.exit(0); });

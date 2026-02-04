@@ -21,3 +21,10 @@ playwriter-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+screenshot.png
+windows_screenshot.png
+windows_cmd_screenshot.png
+
+# Dialyzer PLT files
+/priv/plts/

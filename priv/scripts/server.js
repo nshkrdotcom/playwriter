@@ -11,6 +11,7 @@ async function main() {
   const server = await chromium.launchServer({
     headless: false,
     port: PORT,
+    host: '0.0.0.0',
   });
 
   const wsEndpoint = server.wsEndpoint();

@@ -22,14 +22,11 @@ You're developing in WSL. You need to automate a browser. But when you launch Ch
 
 ## The Solution
 
-Playwriter connects your Elixir code running in WSL to a Playwright server on Windows. The browser opens on your Windows desktop where you can see it. Click buttons, fill forms, take screenshots—all visible in real-time.
+Playwriter runs Playwright directly on Windows via PowerShell, controlled from your Elixir code in WSL. The browser opens on your Windows desktop where you can see it. Click buttons, fill forms, take screenshots—all visible in real-time. No server setup, no firewall rules, no network configuration.
 
 ```elixir
-# This browser opens on your Windows desktop
-{:ok, html} = Playwriter.fetch_html("https://example.com",
-  mode: :remote,
-  headless: false
-)
+# This browser opens on your Windows desktop - visible!
+{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
 ```
 
 ## Quick Start
@@ -42,6 +39,13 @@ Add to your `mix.exs`:
 def deps do
   [{:playwriter, "~> 0.1.0"}]
 end
+```
+
+Then run setup:
+
+```bash
+mix deps.get
+mix playwriter.setup
 ```
 
 ### Basic Usage (Local/Headless)
@@ -57,19 +61,17 @@ File.write!("screenshot.png", png)
 
 ### WSL to Windows (Visible Browser)
 
-**1. Start the Playwright server on Windows:**
+**One-time setup on Windows:**
 
 ```powershell
-npx playwright run-server --port 3337
+# Run from WSL - installs Playwright in Windows temp directory
+powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
 ```
 
-**2. Connect from WSL:**
+**Use from Elixir:**
 
 ```elixir
-{:ok, html} = Playwriter.fetch_html("https://example.com",
-  mode: :remote,
-  headless: false
-)
+{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
 ```
 
 A browser window opens on your Windows desktop. You watch it navigate. You see the page load.
@@ -79,7 +81,7 @@ A browser window opens on your Windows desktop. You watch it navigate. You see t
 For complex workflows, use `with_browser/2`:
 
 ```elixir
-{:ok, result} = Playwriter.with_browser([mode: :remote, headless: false], fn ctx ->
+{:ok, result} = Playwriter.with_browser([mode: :windows], fn ctx ->
   # Navigate
   :ok = Playwriter.goto(ctx, "https://example.com/login")
 
@@ -99,31 +101,31 @@ end)
 
 The browser stays open for the entire session. You see every action happen.
 
-## Two Modes
+## Three Modes
 
 | Mode | Use Case | Browser Location |
 |------|----------|------------------|
 | `:local` (default) | CI/CD, headless scraping | Same machine as Elixir |
-| `:remote` | Development, debugging, demos | Windows desktop (visible) |
+| `:windows` | WSL development, debugging, demos | Windows desktop (visible) |
+| `:remote` | Distributed automation (advanced) | Remote server |
 
 ```elixir
 # Local mode - fast, headless
 Playwriter.fetch_html(url)
 Playwriter.fetch_html(url, mode: :local)
 
-# Remote mode - visible on Windows
-Playwriter.fetch_html(url, mode: :remote)
+# Windows mode - visible on Windows desktop (recommended for WSL)
+Playwriter.fetch_html(url, mode: :windows)
 ```
 
 ## Configuration
 
 ```elixir
 Playwriter.fetch_html(url,
-  mode: :remote,                    # :local or :remote
+  mode: :windows,                   # :local, :windows, or :remote
   headless: false,                  # true for invisible, false to watch
-  browser_type: :chromium,          # :chromium, :firefox, :webkit
-  timeout: 30_000,                  # milliseconds
-  ws_endpoint: "ws://localhost:3337/"  # explicit server URL
+  browser_type: :chromium,          # :chromium (only for :windows mode)
+  timeout: 30_000                   # milliseconds
 )
 ```
 
@@ -135,15 +137,16 @@ Playwriter.fetch_html(url,
 │  ┌─────────────────────────────────────────────┐  │
 │  │         Your Elixir Application             │  │
 │  │                                             │  │
-│  │   Playwriter.fetch_html(url, mode: :remote) │  │
+│  │  Playwriter.fetch_html(url, mode: :windows) │  │
 │  └─────────────────────┬───────────────────────┘  │
-│                        │ WebSocket                │
+│                        │ stdin/stdout              │
+│                        │ (via PowerShell)          │
 └────────────────────────┼──────────────────────────┘
                          │
 ┌────────────────────────┼─────────────────────────┐
 │                        ▼           Windows       │
 │  ┌────────────────────────────────────────────┐  │
-│  │           Playwright Server                │  │
+│  │         Node.js + Playwright               │  │
 │  └─────────────────────┬──────────────────────┘  │
 │                        │                         │
 │  ┌────────────────────────────────────────────┐  │
@@ -153,13 +156,13 @@ Playwriter.fetch_html(url,
 └──────────────────────────────────────────────────┘
 ```
 
-Playwriter automatically discovers the Windows Playwright server by scanning common ports and resolving WSL gateway IPs.
+The `:windows` mode bypasses WSL2's Hyper-V networking entirely by communicating via PowerShell stdin/stdout.
 
 ## Documentation
 
 - **[Getting Started](guides/getting-started.md)** - Installation and first steps
 - **[Architecture](guides/architecture.md)** - How Playwriter works
-- **[Transport Layer](guides/transports.md)** - Local vs Remote modes
+- **[Transport Layer](guides/transports.md)** - Local, Windows, and Remote modes
 - **[WSL-Windows Integration](guides/wsl-windows.md)** - Detailed setup guide
 - **[Function Reference](guides/functions.md)** - Complete function documentation
 - **[Examples](guides/examples.md)** - Real-world usage patterns

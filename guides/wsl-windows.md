@@ -11,7 +11,7 @@ When developing in WSL, you often want to:
 - **Debug interactively** - Pause and inspect the browser state
 - **Demo to stakeholders** - Show browser automation to non-technical users
 
-The challenge: browsers launched from WSL run headless or in a virtual display. Playwriter solves this by connecting to a Playwright server running natively on Windows.
+The challenge: browsers launched from WSL run headless or in a virtual display, and WSL2's Hyper-V networking blocks most connection attempts to Windows. Playwriter solves this with the `:windows` mode.
 
 ## Architecture
 
@@ -22,18 +22,18 @@ The challenge: browsers launched from WSL run headless or in a virtual display. 
 │  │              Your Elixir Application                │   │
 │  │                                                     │   │
 │  │   Playwriter.fetch_html("https://example.com",      │   │
-│  │     mode: :remote)                                  │   │
+│  │     mode: :windows)                                 │   │
 │  └───────────────────────┬─────────────────────────────┘   │
 │                          │                                 │
-│                          │ WebSocket                       │
-│                          │ ws://172.x.x.x:3337/            │
+│                          │ Erlang Port                     │
+│                          │ (stdin/stdout via PowerShell)   │
 └──────────────────────────┼─────────────────────────────────┘
                            │
 ┌──────────────────────────┼─────────────────────────────────┐
 │                          ▼                    Windows      │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │              Playwright Server                      │   │
-│  │              (Node.js on Windows)                   │   │
+│  │              PowerShell + Node.js                   │   │
+│  │              (runs Playwright directly)             │   │
 │  └───────────────────────┬─────────────────────────────┘   │
 │                          │                                 │
 │                          ▼                                 │
@@ -44,11 +44,13 @@ The challenge: browsers launched from WSL run headless or in a virtual display. 
 └────────────────────────────────────────────────────────────┘
 ```
 
+The `:windows` mode bypasses WSL2's Hyper-V firewall entirely by communicating via PowerShell stdin/stdout instead of network sockets.
+
 ## Setup
 
 ### 1. Install Node.js on Windows
 
-The Playwright server runs on Node.js. Install Node.js on Windows (not WSL):
+The Playwright driver runs on Node.js. Install Node.js on Windows (not WSL):
 
 ```powershell
 # Using winget
@@ -59,93 +61,33 @@ winget install OpenJS.NodeJS.LTS
 
 ### 2. Install Playwright on Windows
 
-Open PowerShell and install Playwright:
-
-```powershell
-# Create a directory for the server
-mkdir C:\playwright-server
-cd C:\playwright-server
-
-# Initialize and install Playwright
-npm init -y
-npm install playwright
-npx playwright install chromium
-```
-
-### 3. Start the Playwright Server
-
-From PowerShell:
-
-```powershell
-# Simple start
-npx playwright run-server --port 3337
-
-# Or use the provided script from your playwriter project
-cd /path/to/playwriter  # Windows path to your project
-powershell.exe -File priv/scripts/start_server.ps1
-```
-
-The server will output:
-```
-Listening on ws://0.0.0.0:3337/
-```
-
-### 4. Connect from WSL
-
-```elixir
-# Auto-discover the server
-{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :remote)
-
-# Or specify the endpoint explicitly
-{:ok, html} = Playwriter.fetch_html("https://example.com",
-  mode: :remote,
-  ws_endpoint: "ws://localhost:3337/"
-)
-```
-
-## Configuration
-
-### Finding the Right Host
-
-Playwriter's discovery mechanism tries multiple hosts:
-
-1. **localhost** - Works when WSL networking is in NAT mode
-2. **WSL Gateway IP** - The Windows host IP from WSL's perspective
-3. **host.docker.internal** - Docker Desktop's host alias
-
-To find your WSL gateway IP manually:
+Run the setup script from WSL:
 
 ```bash
-# In WSL
-cat /etc/resolv.conf | grep nameserver
-# Output: nameserver 172.25.160.1
+# One-time setup - installs Playwright in Windows temp directory
+powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
 ```
 
-### Port Configuration
+This creates `%TEMP%\playwriter-server` on Windows with Playwright installed.
 
-The default port is 3337. You can change it:
-
-```powershell
-# Windows: Start server on different port
-npx playwright run-server --port 9222
-```
+### 3. Use from Elixir
 
 ```elixir
-# WSL: Connect to that port
-Playwriter.fetch_html(url,
-  mode: :remote,
-  ws_endpoint: "ws://localhost:9222/"
-)
-```
+# Simple fetch
+{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
 
-### Browser Type
+# Screenshot
+{:ok, png} = Playwriter.screenshot("https://example.com", mode: :windows)
+File.write!("screenshot.png", png)
 
-```elixir
-# Use Firefox instead of Chromium
-Playwriter.fetch_html(url,
-  mode: :remote,
-  browser_type: :firefox
-)
+# Full browser control
+Playwriter.with_browser([mode: :windows], fn ctx ->
+  :ok = Playwriter.goto(ctx, "https://example.com")
+  :ok = Playwriter.fill(ctx, "input[name=q]", "search term")
+  :ok = Playwriter.click(ctx, "button[type=submit]")
+  {:ok, html} = Playwriter.content(ctx)
+  html
+end)
 ```
 
 ## Development Workflow
@@ -158,7 +100,7 @@ Start an IEx session and explore:
 iex -S mix
 
 # See the browser while you work
-{:ok, result} = Playwriter.with_browser([mode: :remote, headless: false], fn ctx ->
+{:ok, result} = Playwriter.with_browser([mode: :windows], fn ctx ->
   :ok = Playwriter.goto(ctx, "https://example.com")
 
   # Pause here - inspect the browser on Windows
@@ -171,12 +113,12 @@ end)
 
 ### Debugging Tips
 
-1. **Keep headless: false** - See what's happening
+1. **Use `:windows` mode** - See what's happening in real-time
 2. **Add pauses** - Use `Process.sleep/1` or `IO.gets/1` to slow down
 3. **Take screenshots** - Capture state at key points
 
 ```elixir
-Playwriter.with_browser([mode: :remote, headless: false], fn ctx ->
+Playwriter.with_browser([mode: :windows], fn ctx ->
   :ok = Playwriter.goto(ctx, "https://example.com")
 
   # Screenshot before clicking
@@ -192,92 +134,89 @@ Playwriter.with_browser([mode: :remote, headless: false], fn ctx ->
 end)
 ```
 
+## How It Works
+
+The `:windows` mode uses the `Playwriter.Transport.WindowsCmd` transport which:
+
+1. Writes a Node.js script to `%TEMP%\playwriter-server\transport.js` on Windows
+2. Launches PowerShell with that script via Erlang Ports
+3. Communicates via JSON messages over stdin/stdout
+4. The Node.js script controls Playwright/Chromium on Windows
+
+This approach completely bypasses networking, avoiding all WSL2 Hyper-V firewall issues.
+
 ## Troubleshooting
 
-### "Connection refused" or "Discovery failed"
+### "Playwright not installed" or "Cannot find module 'playwright'"
 
-**Check the server is running:**
-```powershell
-# On Windows
-netstat -an | findstr 3337
-```
+Run the setup script with `-Install`:
 
-**Check Windows Firewall:**
-- Allow Node.js through Windows Firewall
-- Or temporarily disable firewall for testing
-
-**Test connectivity from WSL:**
 ```bash
-# Try to connect
-nc -zv localhost 3337
-# or
-curl -v ws://localhost:3337/
+powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
 ```
 
-### "Browser not visible"
-
-Ensure you're passing `headless: false`:
-
-```elixir
-Playwriter.fetch_html(url, mode: :remote, headless: false)
-```
-
-### "Wrong browser opens"
-
-Install the browser you want on Windows:
+Or manually install on Windows:
 
 ```powershell
-npx playwright install firefox
-npx playwright install webkit
+cd $env:TEMP\playwriter-server
+npm install playwright
+npx playwright install chromium
 ```
 
-### WSL 1 vs WSL 2
+### "Timeout waiting for transport to start"
 
-- **WSL 1**: `localhost` should work directly
-- **WSL 2**: May need the gateway IP; Playwriter's discovery handles this
+Check that:
+1. Node.js is installed on Windows and in PATH
+2. Playwright is installed in `%TEMP%\playwriter-server`
 
-Check your WSL version:
-```bash
-wsl.exe -l -v
-```
-
-### Slow performance
-
-- Use headless mode for actual scraping (local transport)
-- Remote mode adds network latency
-- Consider running the server on the same network segment
-
-## Advanced Configuration
-
-### Environment Variables
-
-Set defaults via environment:
+Test manually:
 
 ```bash
-# In .bashrc or .zshrc
-export PLAYWRITER_WS_ENDPOINT="ws://172.25.160.1:3337/"
+# From WSL
+powershell.exe -Command "cd $env:TEMP\playwriter-server; node -e 'console.log(require(\"playwright\").chromium)'"
 ```
+
+### "Browser closes immediately"
+
+Make sure you're not letting the session close. Use `with_browser` to keep the browser open:
 
 ```elixir
-# Use in code
-endpoint = System.get_env("PLAYWRITER_WS_ENDPOINT")
-Playwriter.fetch_html(url, mode: :remote, ws_endpoint: endpoint)
+Playwriter.with_browser([mode: :windows], fn ctx ->
+  :ok = Playwriter.goto(ctx, "https://example.com")
+  Process.sleep(5000)  # Keep browser open for 5 seconds
+  :ok
+end)
 ```
 
-### Application Config
+### "PowerShell execution policy error"
 
-Configure in `config/config.exs`:
+Always run with `-ExecutionPolicy Bypass`:
+
+```bash
+powershell.exe -ExecutionPolicy Bypass -File script.ps1
+```
+
+### Checking Windows User Detection
+
+The transport detects your Windows username from `/mnt/c/Users/`. If it picks the wrong user:
 
 ```elixir
-config :playwriter,
-  default_mode: :remote,
-  default_ws_endpoint: "ws://localhost:3337/",
-  default_browser_type: :chromium
+# Check what user is detected
+File.ls!("/mnt/c/Users")
+|> Enum.reject(&(&1 in ["Public", "Default", "Default User", "All Users", "desktop.ini"]))
 ```
 
-### Running Server as Windows Service
+## Comparison: Windows Mode vs Remote Mode
 
-For persistent development, run the Playwright server as a Windows service or scheduled task that starts on login.
+| Feature | `:windows` mode | `:remote` mode |
+|---------|----------------|----------------|
+| Setup required | Just npm install | Run a server |
+| Network issues | None (stdin/stdout) | WSL2 firewall blocks it |
+| Performance | Good | Slightly faster |
+| WSL2 compatible | Yes | No (blocked by Hyper-V) |
+| Recommended for WSL | **Yes** | No |
+
+Use `:windows` mode for WSL-to-Windows browser automation. The `:remote` mode exists for other distributed scenarios but doesn't work reliably from WSL2.
 
 ## Next Steps
 

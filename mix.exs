@@ -42,7 +42,7 @@ defmodule Playwriter.MixProject do
 
   defp deps do
     [
-      # Core - using playwright_ex
+      # Core - playwright_ex for local, websockex for remote
       {:playwright_ex, "~> 0.3.2"},
       {:nimble_options, "~> 1.1"},
       {:websockex, "~> 0.4.3"},
@@ -77,7 +77,7 @@ defmodule Playwriter.MixProject do
   defp package do
     [
       name: "playwriter",
-      files: ~w(lib priv .formatter.exs mix.exs README.md LICENSE CHANGELOG.md),
+      files: ~w(lib priv/scripts .formatter.exs mix.exs README.md LICENSE CHANGELOG.md),
       maintainers: ["NSHkr"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
@@ -95,7 +95,7 @@ defmodule Playwriter.MixProject do
       logo: "assets/playwriter.svg",
       assets: %{"assets" => "assets"},
       extras: [
-        "README.md",
+        {"README.md", filename: "readme", title: "Overview"},
         "CHANGELOG.md",
         "LICENSE",
         {"guides/getting-started.md", title: "Getting Started"},
@@ -103,11 +103,14 @@ defmodule Playwriter.MixProject do
         {"guides/transports.md", title: "Transport Layer"},
         {"guides/wsl-windows.md", title: "WSL-Windows Integration"},
         {"guides/functions.md", title: "Function Reference"},
-        {"guides/examples.md", title: "Examples"},
-        {"guides/troubleshooting.md", title: "Troubleshooting"}
+        {"guides/examples.md", title: "Usage Examples"},
+        {"guides/testing.md", title: "Testing Guide"},
+        {"guides/troubleshooting.md", title: "Troubleshooting"},
+        {"examples/README.md", filename: "running-examples", title: "Running Examples"}
       ],
       groups_for_extras: [
-        Guides: ~r/guides\/.*/
+        Guides: ~r/guides\/.*/,
+        Examples: ~r/examples\/.*/
       ],
       groups_for_modules: [
         "Public API": [Playwriter],

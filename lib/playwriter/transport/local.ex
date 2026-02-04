@@ -41,12 +41,12 @@ defmodule Playwriter.Transport.Local do
 
   @impl Playwriter.Transport.Behaviour
   def new_context(transport, browser_guid, opts \\ []) do
-    GenServer.call(transport, {:new_context, browser_guid, opts})
+    GenServer.call(transport, {:new_context, browser_guid, opts}, 35_000)
   end
 
   @impl Playwriter.Transport.Behaviour
   def new_page(transport, context_guid) do
-    GenServer.call(transport, {:new_page, context_guid})
+    GenServer.call(transport, {:new_page, context_guid}, 35_000)
   end
 
   @impl Playwriter.Transport.Behaviour
@@ -56,37 +56,37 @@ defmodule Playwriter.Transport.Local do
 
   @impl Playwriter.Transport.Behaviour
   def content(transport, frame_guid) do
-    GenServer.call(transport, {:content, frame_guid})
+    GenServer.call(transport, {:content, frame_guid}, 35_000)
   end
 
   @impl Playwriter.Transport.Behaviour
   def screenshot(transport, page_guid, opts \\ []) do
-    GenServer.call(transport, {:screenshot, page_guid, opts})
+    GenServer.call(transport, {:screenshot, page_guid, opts}, 35_000)
   end
 
   @impl Playwriter.Transport.Behaviour
   def click(transport, frame_guid, selector, opts \\ []) do
-    GenServer.call(transport, {:click, frame_guid, selector, opts})
+    GenServer.call(transport, {:click, frame_guid, selector, opts}, 35_000)
   end
 
   @impl Playwriter.Transport.Behaviour
   def fill(transport, frame_guid, selector, value, opts \\ []) do
-    GenServer.call(transport, {:fill, frame_guid, selector, value, opts})
+    GenServer.call(transport, {:fill, frame_guid, selector, value, opts}, 35_000)
   end
 
   @impl Playwriter.Transport.Behaviour
   def close_page(transport, page_guid) do
-    GenServer.call(transport, {:close_page, page_guid})
+    GenServer.call(transport, {:close_page, page_guid}, 10_000)
   end
 
   @impl Playwriter.Transport.Behaviour
   def close_context(transport, context_guid) do
-    GenServer.call(transport, {:close_context, context_guid})
+    GenServer.call(transport, {:close_context, context_guid}, 10_000)
   end
 
   @impl Playwriter.Transport.Behaviour
   def close_browser(transport, browser_guid) do
-    GenServer.call(transport, {:close_browser, browser_guid})
+    GenServer.call(transport, {:close_browser, browser_guid}, 10_000)
   end
 
   @impl Playwriter.Transport.Behaviour
@@ -144,7 +144,7 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call({:new_page, context_guid}, _from, state) do
-    case PlaywrightEx.BrowserContext.new_page(context_guid, []) do
+    case PlaywrightEx.BrowserContext.new_page(context_guid, timeout: 30_000) do
       {:ok, %{guid: page_guid, main_frame: frame}} ->
         {:reply, {:ok, %{guid: page_guid, main_frame: frame}}, state}
 
@@ -169,7 +169,7 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call({:content, frame_guid}, _from, state) do
-    case PlaywrightEx.Frame.content(frame_guid, []) do
+    case PlaywrightEx.Frame.content(frame_guid, timeout: 30_000) do
       {:ok, html} when is_binary(html) ->
         {:reply, {:ok, html}, state}
 
@@ -181,13 +181,15 @@ defmodule Playwriter.Transport.Local do
   @impl GenServer
   def handle_call({:screenshot, page_guid, opts}, _from, state) do
     screenshot_opts = [
+      timeout: opts[:timeout] || 30_000,
       full_page: opts[:full_page] || false,
       omit_background: opts[:omit_background] || false
     ]
 
     case PlaywrightEx.Page.screenshot(page_guid, screenshot_opts) do
-      {:ok, binary} when is_binary(binary) ->
-        {:reply, {:ok, binary}, state}
+      {:ok, base64_data} when is_binary(base64_data) ->
+        # Playwright returns screenshot as base64-encoded data
+        {:reply, {:ok, Base.decode64!(base64_data)}, state}
 
       {:error, _} = error ->
         {:reply, error, state}
@@ -226,7 +228,7 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call({:close_context, context_guid}, _from, state) do
-    PlaywrightEx.BrowserContext.close(context_guid, [])
+    PlaywrightEx.BrowserContext.close(context_guid, timeout: 5_000)
     {:reply, :ok, state}
   catch
     _, _ -> {:reply, :ok, state}
@@ -234,7 +236,7 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call({:close_browser, browser_guid}, _from, state) do
-    PlaywrightEx.Browser.close(browser_guid, [])
+    PlaywrightEx.Browser.close(browser_guid, timeout: 5_000)
     {:reply, :ok, state}
   catch
     _, _ -> {:reply, :ok, state}
@@ -255,10 +257,12 @@ defmodule Playwriter.Transport.Local do
   @impl GenServer
   def terminate(_reason, state) do
     if state.supervisor && Process.alive?(state.supervisor) do
-      Supervisor.stop(state.supervisor)
+      Supervisor.stop(state.supervisor, :normal, 5_000)
     end
 
     :ok
+  catch
+    :exit, _ -> :ok
   end
 
   # Private functions
@@ -268,18 +272,25 @@ defmodule Playwriter.Transport.Local do
       opts
       |> Keyword.take([:timeout, :executable])
       |> Keyword.put_new(:timeout, 30_000)
+      |> Keyword.put_new(:executable, default_executable())
 
     PlaywrightEx.Supervisor.start_link(playwright_opts)
   end
 
+  defp default_executable do
+    # The playwright dependency installs Playwright in priv/static
+    Path.join(["deps", "playwright", "priv", "static", "node_modules", "playwright", "cli.js"])
+  end
+
   defp build_browser_opts(opts) do
     opts
-    |> Keyword.take([:headless, :slow_mo, :executable_path, :channel])
+    |> Keyword.take([:headless, :slow_mo, :executable_path, :channel, :timeout])
     |> Keyword.put_new(:headless, true)
+    |> Keyword.put_new(:timeout, 30_000)
   end
 
   defp build_context_opts(opts) do
-    base = []
+    base = [timeout: opts[:timeout] || 30_000]
 
     base
     |> maybe_add(:viewport, opts[:viewport])

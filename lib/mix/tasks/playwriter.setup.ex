@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Playwriter.Setup do
       mix playwriter.setup
 
   This will:
-  1. Install Playwright npm dependencies in deps/playwright_ex
+  1. Install Playwright npm dependencies in deps/playwright/priv/static
   2. Download Chromium browser
 
   ## Options
@@ -28,7 +28,7 @@ defmodule Mix.Tasks.Playwriter.Setup do
   use Mix.Task
 
   @shortdoc "Install Playwright for local browser automation"
-  @playwright_ex_path Path.join(["deps", "playwright_ex"])
+  @playwright_path Path.join(["deps", "playwright", "priv", "static"])
 
   @impl Mix.Task
   def run(args) do
@@ -46,8 +46,8 @@ defmodule Mix.Tasks.Playwriter.Setup do
   end
 
   defp verify_deps_exist! do
-    unless File.dir?(@playwright_ex_path) do
-      Mix.shell().error("Error: playwright_ex dependency not found.")
+    unless File.dir?(@playwright_path) do
+      Mix.shell().error("Error: playwright dependency not found.")
       Mix.shell().error("Run `mix deps.get` first.")
       System.halt(1)
     end
@@ -56,7 +56,7 @@ defmodule Mix.Tasks.Playwriter.Setup do
   defp install_npm_deps! do
     Mix.shell().info("Step 1: Installing npm dependencies...")
 
-    case System.cmd("npm", ["install"], cd: @playwright_ex_path, stderr_to_stdout: true) do
+    case System.cmd("npm", ["install"], cd: @playwright_path, stderr_to_stdout: true) do
       {output, 0} ->
         Mix.shell().info(output)
         Mix.shell().info("npm dependencies installed.")
@@ -78,7 +78,7 @@ defmodule Mix.Tasks.Playwriter.Setup do
 
     Mix.shell().info("Step 2: Installing #{browser} browser...")
 
-    case System.cmd("npx", npx_args, cd: @playwright_ex_path, stderr_to_stdout: true) do
+    case System.cmd("npx", npx_args, cd: @playwright_path, stderr_to_stdout: true) do
       {output, 0} ->
         Mix.shell().info(output)
         Mix.shell().info("Browser installed successfully.")

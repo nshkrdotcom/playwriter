@@ -40,7 +40,7 @@ case Support.detect_mode(requested_mode, opts) do
         {:ok, _content} = Playwriter.content(ctx)
 
         IO.puts("4. Clicking submit button...")
-        :ok = Playwriter.click(ctx, "button[type=submit]")
+        :ok = Playwriter.click(ctx, "button")
 
         # Wait a moment for navigation
         Process.sleep(1000)
