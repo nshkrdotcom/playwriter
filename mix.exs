@@ -77,7 +77,8 @@ defmodule Playwriter.MixProject do
   defp package do
     [
       name: "playwriter",
-      files: ~w(lib assets priv/scripts .formatter.exs mix.exs README.md LICENSE CHANGELOG.md),
+      files:
+        ~w(lib assets priv/scripts .formatter.exs mix.exs README.md LICENSE CHANGELOG.md examples guides),
       maintainers: ["NSHkr"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
