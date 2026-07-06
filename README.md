@@ -144,6 +144,17 @@ Playwriter.with_browser([mode: :windows], fn ctx ->
 end)
 ```
 
+### Start past an auth gate — `add_cookies` / `storage_state`
+
+```elixir
+{:ok, ctx} = Session.new_context(session, [])
+:ok = Session.add_cookies(session, ctx, [
+  %{name: "_session", value: signed, domain: "localhost", path: "/", sameSite: "Lax"}
+])
+{:ok, page} = Session.new_page(session, context_guid: ctx)   # already authenticated
+{:ok, state} = Session.storage_state(session, ctx)           # capture cookies + localStorage
+```
+
 ### CDP (network fault injection) — `:windows` only
 
 ```elixir

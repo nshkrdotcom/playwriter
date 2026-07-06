@@ -143,6 +143,8 @@ defmodule Playwriter.Transport.WindowsCmdTest do
             "case 'evaluate'",
             "case 'waitForFunction'",
             "case 'addInitScript'",
+            "case 'addCookies'",
+            "case 'storageState'",
             "case 'newCDPSession'",
             "case 'cdpSend'",
             "case 'exposeBinding'",

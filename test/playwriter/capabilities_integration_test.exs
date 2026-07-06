@@ -75,6 +75,20 @@ defmodule Playwriter.CapabilitiesIntegrationTest do
       {:ok, ctx} = Session.new_context(s, [])
       assert {:error, :not_supported} = Session.expose_binding(s, ctx, "cb", fn _ -> :ok end)
     end
+
+    test "add_cookies + storage_state round-trip (seeded-session login path)", %{session: s} do
+      {:ok, ctx} = Session.new_context(s, [])
+
+      :ok =
+        Session.add_cookies(s, ctx, [
+          %{name: "_listener_web_key", value: "seed-abc", domain: "localhost", path: "/"}
+        ])
+
+      {:ok, state} = Session.storage_state(s, ctx)
+      assert is_map(state)
+      # the seeded cookie survives the round trip
+      assert inspect(state) =~ "seed-abc"
+    end
   end
 
   # Separate block: no shared session (playwright_ex's connection is a global
@@ -147,6 +161,19 @@ defmodule Playwriter.CapabilitiesIntegrationTest do
                  downloadThroughput: 100_000,
                  uploadThroughput: 100_000
                })
+    end
+
+    test "add_cookies + storage_state round-trip", %{session: s} do
+      {:ok, ctx} = Session.new_context(s, [])
+
+      :ok =
+        Session.add_cookies(s, ctx, [
+          %{name: "_listener_web_key", value: "seed-abc", domain: "localhost", path: "/"}
+        ])
+
+      {:ok, state} = Session.storage_state(s, ctx)
+      assert is_map(state)
+      assert inspect(state) =~ "seed-abc"
     end
 
     test "expose_binding lets the page call back into Elixir (experimental)", %{session: s} do

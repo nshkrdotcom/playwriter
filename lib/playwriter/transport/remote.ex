@@ -99,6 +99,16 @@ defmodule Playwriter.Transport.Remote do
   end
 
   @impl Playwriter.Transport.Behaviour
+  def add_cookies(_transport, _context_guid, _cookies) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def storage_state(_transport, _context_guid) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
   def new_cdp_session(_transport, _page_guid) do
     {:error, :not_supported}
   end

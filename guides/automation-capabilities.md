@@ -18,6 +18,7 @@ page-scoped ones also have thin `Playwriter` facade wrappers for use inside
 | `evaluate/4` | ✅ | ✅ | — |
 | `wait_for_function/4` | ✅ | ✅ | — |
 | `add_init_script/4` | ✅ | ✅ | — |
+| `add_cookies/3` + `storage_state/2` | ✅ | ✅ | — |
 | `new_cdp_session/2` + `cdp_send/4` | ✅ | `:not_supported` | — |
 | `expose_binding/4` | ✅ (experimental) | `:not_supported` | — |
 | binary returns (`screenshot/3`) | ✅ `value_b64` | ✅ | — |
@@ -66,6 +67,33 @@ default `"raf"`), `:timeout`. Returns `:ok` once the predicate is truthy, or
 The script is **context-scoped** and runs before any page script on every page
 and navigation in that context — so it must be added **before** `new_page/2`.
 Use it to install a debug bridge or seed determinism (`Math.random`, timers).
+
+## `add_cookies/3` + `storage_state/2` — start past an auth gate
+
+For apps behind a login/onboarding gate, seed a pre-signed session cookie
+instead of driving the login UI every test:
+
+```elixir
+{:ok, ctx} = Session.new_context(session, [])
+
+:ok = Session.add_cookies(session, ctx, [
+  %{name: "_listener_web_key", value: signed_cookie,
+    domain: "localhost", path: "/", sameSite: "Lax"}
+])
+
+{:ok, page} = Session.new_page(session, context_guid: ctx)   # already authenticated
+```
+
+Cookie maps use Playwright's field names (`name`, `value`, and either `url` or
+`domain`+`path`; optionally `httpOnly`, `secure`, `sameSite`, `expires`).
+
+Alternatively, log in once through the real forms (`fill/4` + `click/4`),
+capture the context's cookies + localStorage with `storage_state/2`, and re-seed
+the cookies with `add_cookies/3` in later runs:
+
+```elixir
+{:ok, state} = Session.storage_state(session, ctx)   # %{"cookies" => [...], "origins" => [...]}
+```
 
 ## CDP — network fault injection (`:windows` only)
 

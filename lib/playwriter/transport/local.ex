@@ -93,6 +93,16 @@ defmodule Playwriter.Transport.Local do
   end
 
   @impl Playwriter.Transport.Behaviour
+  def add_cookies(transport, context_guid, cookies) do
+    GenServer.call(transport, {:add_cookies, context_guid, cookies}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def storage_state(transport, context_guid) do
+    GenServer.call(transport, {:storage_state, context_guid}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
   def new_cdp_session(_transport, _page_guid) do
     # playwright_ex exposes no CDP surface; prefer server-side fault injection,
     # or the :windows transport for CDP-based faults.
@@ -295,6 +305,19 @@ defmodule Playwriter.Transport.Local do
       {:ok, _} -> {:reply, :ok, state}
       {:error, _} = error -> {:reply, error, state}
     end
+  end
+
+  @impl GenServer
+  def handle_call({:add_cookies, context_guid, cookies}, _from, state) do
+    case PlaywrightEx.BrowserContext.add_cookies(context_guid, cookies: cookies, timeout: 30_000) do
+      {:ok, _} -> {:reply, :ok, state}
+      {:error, _} = error -> {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call({:storage_state, context_guid}, _from, state) do
+    {:reply, PlaywrightEx.BrowserContext.storage_state(context_guid, timeout: 30_000), state}
   end
 
   @impl GenServer

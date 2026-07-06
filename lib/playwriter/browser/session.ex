@@ -201,6 +201,36 @@ defmodule Playwriter.Browser.Session do
   end
 
   @doc """
+  Add cookies to a context (guid from `new_context/2`). Each cookie is a map
+  using Playwright's field names (`name`, `value`, and either `url` or
+  `domain`+`path`; optionally `httpOnly`, `secure`, `sameSite`, `expires`).
+
+  This is the fast way past an auth gate: seed a pre-signed session cookie
+  instead of driving the login UI.
+
+  ## Examples
+
+      {:ok, ctx} = Session.new_context(session, [])
+      :ok = Session.add_cookies(session, ctx, [
+        %{name: "_listener_web_key", value: signed, domain: "localhost", path: "/", sameSite: "Lax"}
+      ])
+      {:ok, page} = Session.new_page(session, context_guid: ctx)   # starts past the gate
+  """
+  @spec add_cookies(GenServer.server(), String.t(), [map()]) :: :ok | {:error, term()}
+  def add_cookies(session, context_guid, cookies) do
+    GenServer.call(session, {:add_cookies, context_guid, cookies}, 35_000)
+  end
+
+  @doc """
+  Return a context's storage state (cookies + localStorage). Capture it after a
+  UI login and re-seed it with `add_cookies/3` in later runs.
+  """
+  @spec storage_state(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()}
+  def storage_state(session, context_guid) do
+    GenServer.call(session, {:storage_state, context_guid}, 35_000)
+  end
+
+  @doc """
   Open a Chrome DevTools Protocol session for a page. Returns an opaque CDP
   session id to use with `cdp_send/4`.
 
@@ -393,6 +423,16 @@ defmodule Playwriter.Browser.Session do
   def handle_call({:add_init_script, context_guid, script, opts}, _from, state) do
     result = call_transport(state, :add_init_script, [context_guid, script, opts])
     {:reply, result, state}
+  end
+
+  @impl GenServer
+  def handle_call({:add_cookies, context_guid, cookies}, _from, state) do
+    {:reply, call_transport(state, :add_cookies, [context_guid, cookies]), state}
+  end
+
+  @impl GenServer
+  def handle_call({:storage_state, context_guid}, _from, state) do
+    {:reply, call_transport(state, :storage_state, [context_guid]), state}
   end
 
   @impl GenServer

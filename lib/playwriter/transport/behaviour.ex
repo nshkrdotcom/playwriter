@@ -71,6 +71,20 @@ defmodule Playwriter.Transport.Behaviour do
               :ok | {:error, term()}
 
   @doc """
+  Add cookies to a context. Each cookie is a map using Playwright's field names
+  (`name`, `value`, and either `url` or `domain`+`path`; optionally `expires`,
+  `httpOnly`, `secure`, `sameSite`). Used to seed a signed session cookie so
+  tests can start past an auth gate without driving the login UI.
+  """
+  @callback add_cookies(transport(), guid(), [map()]) :: :ok | {:error, term()}
+
+  @doc """
+  Return the context's storage state (cookies + localStorage snapshot), e.g. to
+  capture it after a UI login and re-seed it (via `add_cookies/3`) in later runs.
+  """
+  @callback storage_state(transport(), guid()) :: {:ok, map()} | {:error, term()}
+
+  @doc """
   Open a Chrome DevTools Protocol session for a page. Returns an opaque CDP
   session id to be used with `cdp_send/4`.
 

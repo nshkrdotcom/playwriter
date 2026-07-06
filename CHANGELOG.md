@@ -22,6 +22,10 @@ bindings. Every new verb is a transport-behaviour callback implemented across
     (`:polling`/`:timeout` options).
   - `add_init_script/4` - install a context-scoped script that runs before any
     page script on every page/navigation (must precede `new_page`).
+  - `add_cookies/3` + `storage_state/2` - seed a context's cookies (e.g. a
+    pre-signed session cookie, to start a test past an auth gate without driving
+    the login UI) and capture its storage state (cookies + localStorage) for
+    reuse. Full on `:windows` and `:local`.
   - `new_cdp_session/2` + `cdp_send/4` - open a Chrome DevTools Protocol session
     for a page and send CDP commands (e.g. `Network.emulateNetworkConditions`,
     `Network.setBlockedURLs`). **Windows transport only**; `:local` returns

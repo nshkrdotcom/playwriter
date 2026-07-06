@@ -77,6 +77,20 @@ defmodule Playwriter.Browser.SessionDispatchTest do
     assert :ok = Session.add_init_script(s, "ctx-9", "window.__debug=1")
   end
 
+  test "add_cookies/3 dispatches against the raw context guid with the cookie list", %{session: s} do
+    cookies = [%{name: "_listener_web_key", value: "signed", domain: "localhost", path: "/"}]
+    expect(Mock, :add_cookies, fn :mock_transport, "ctx-9", ^cookies -> :ok end)
+    assert :ok = Session.add_cookies(s, "ctx-9", cookies)
+  end
+
+  test "storage_state/2 dispatches against the raw context guid", %{session: s} do
+    expect(Mock, :storage_state, fn :mock_transport, "ctx-9" ->
+      {:ok, %{"cookies" => [], "origins" => []}}
+    end)
+
+    assert {:ok, %{"cookies" => []}} = Session.storage_state(s, "ctx-9")
+  end
+
   test "new_cdp_session/2 dispatches with the page guid", %{session: s, page: p} do
     expect(Mock, :new_cdp_session, fn :mock_transport, "page-1" -> {:ok, "cdp-1"} end)
     assert {:ok, "cdp-1"} = Session.new_cdp_session(s, p)

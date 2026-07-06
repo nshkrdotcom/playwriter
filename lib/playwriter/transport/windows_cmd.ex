@@ -106,6 +106,17 @@ defmodule Playwriter.Transport.WindowsCmd do
           result = { ok: true };
           break;
 
+        case 'addCookies':
+          await contexts[cmd.params.contextId].addCookies(cmd.params.cookies);
+          result = { ok: true };
+          break;
+
+        case 'storageState': {
+          const s = await contexts[cmd.params.contextId].storageState();
+          result = { json: s };
+          break;
+        }
+
         case 'newCDPSession': {
           const page = pages[cmd.params.pageId];
           const session = await page.context().newCDPSession(page);
@@ -257,6 +268,16 @@ defmodule Playwriter.Transport.WindowsCmd do
   @impl Playwriter.Transport.Behaviour
   def add_init_script(transport, context_guid, script, opts \\ []) do
     GenServer.call(transport, {:add_init_script, context_guid, script, opts}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def add_cookies(transport, context_guid, cookies) do
+    GenServer.call(transport, {:add_cookies, context_guid, cookies}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def storage_state(transport, context_guid) do
+    GenServer.call(transport, {:storage_state, context_guid}, 35_000)
   end
 
   @impl Playwriter.Transport.Behaviour
@@ -474,6 +495,16 @@ defmodule Playwriter.Transport.WindowsCmd do
   @impl GenServer
   def handle_call({:add_init_script, context_id, script, _opts}, from, state) do
     send_command(state, "addInitScript", %{contextId: context_id, script: script}, from)
+  end
+
+  @impl GenServer
+  def handle_call({:add_cookies, context_id, cookies}, from, state) do
+    send_command(state, "addCookies", %{contextId: context_id, cookies: cookies}, from)
+  end
+
+  @impl GenServer
+  def handle_call({:storage_state, context_id}, from, state) do
+    send_command(state, "storageState", %{contextId: context_id}, from)
   end
 
   @impl GenServer
