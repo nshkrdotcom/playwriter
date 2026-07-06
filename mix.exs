@@ -1,7 +1,7 @@
 defmodule Playwriter.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
   @source_url "https://github.com/nshkrdotcom/playwriter"
 
   def project do
@@ -37,23 +37,38 @@ defmodule Playwriter.MixProject do
     ]
   end
 
+  # Run the aliases that invoke `mix test` in the :test env, so `mix check`
+  # (and the test.* aliases) work without an explicit MIX_ENV.
+  def cli do
+    [
+      preferred_envs: [
+        check: :test,
+        "test.integration": :test,
+        "test.windows": :test
+      ]
+    ]
+  end
+
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
     [
-      # Core - playwright_ex for local, websockex for remote
-      {:playwright_ex, "~> 0.3.2"},
+      # Core - playwright_ex drives the local (headless) transport. The Node
+      # Playwright driver the :local transport shells out to is provided at the
+      # environment level (npm `playwright`, or the `playwright` hex package's
+      # bundled cli.js) rather than pinned here - matching playwright_ex's own
+      # "executable:" convention and avoiding the gun/cowlib toolchain coupling.
+      {:playwright_ex, "~> 0.7"},
       {:nimble_options, "~> 1.1"},
-      {:websockex, "~> 0.4.3"},
       {:jason, "~> 1.4"},
 
       # Testing
-      {:supertester, "~> 0.5.1", only: :test},
-      {:mox, "~> 1.1", only: :test},
+      {:supertester, "~> 0.5", only: :test},
+      {:mox, "~> 1.2", only: :test},
 
       # Development
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
@@ -78,7 +93,7 @@ defmodule Playwriter.MixProject do
     [
       name: "playwriter",
       files:
-        ~w(lib assets priv/scripts .formatter.exs mix.exs README.md LICENSE CHANGELOG.md examples guides),
+        ~w(lib assets priv/scripts .formatter.exs mix.exs README.md LICENSE CHANGELOG.md AGENTS.md examples guides),
       maintainers: ["NSHkr"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
@@ -104,6 +119,7 @@ defmodule Playwriter.MixProject do
         {"guides/transports.md", title: "Transport Layer"},
         {"guides/wsl-windows.md", title: "WSL-Windows Integration"},
         {"guides/functions.md", title: "Function Reference"},
+        {"guides/automation-capabilities.md", title: "Automation Capabilities"},
         {"guides/examples.md", title: "Usage Examples"},
         {"guides/testing.md", title: "Testing Guide"},
         {"guides/troubleshooting.md", title: "Troubleshooting"},
@@ -117,11 +133,16 @@ defmodule Playwriter.MixProject do
         "Public API": [Playwriter],
         "Browser Session": [Playwriter.Browser.Session],
         "Transport Layer": [
+          Playwriter.Transport,
           Playwriter.Transport.Behaviour,
           Playwriter.Transport.Local,
+          Playwriter.Transport.WindowsCmd,
           Playwriter.Transport.Remote
         ],
-        "Server Discovery": [Playwriter.Server.Discovery]
+        "Server Discovery": [
+          Playwriter.Server.Discovery,
+          Playwriter.Server.Health
+        ]
       ]
     ]
   end

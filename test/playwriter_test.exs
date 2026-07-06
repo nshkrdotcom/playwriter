@@ -7,7 +7,7 @@ defmodule PlaywriterTest do
 
   describe "version/0" do
     test "returns version string" do
-      assert Playwriter.version() == "0.1.0"
+      assert Playwriter.version() == "0.2.0"
     end
   end
 

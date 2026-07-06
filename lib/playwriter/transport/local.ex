@@ -12,7 +12,6 @@ defmodule Playwriter.Transport.Local do
   @behaviour Playwriter.Transport.Behaviour
 
   use GenServer
-  require Logger
 
   defstruct [:supervisor, :browser_types, :status]
 
@@ -75,9 +74,50 @@ defmodule Playwriter.Transport.Local do
   end
 
   @impl Playwriter.Transport.Behaviour
+  def evaluate(transport, frame_guid, expression, opts \\ []) do
+    GenServer.call(transport, {:evaluate, frame_guid, expression, opts}, call_timeout(opts))
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def wait_for_function(transport, frame_guid, expression, opts \\ []) do
+    GenServer.call(
+      transport,
+      {:wait_for_function, frame_guid, expression, opts},
+      call_timeout(opts)
+    )
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def add_init_script(transport, context_guid, script, opts \\ []) do
+    GenServer.call(transport, {:add_init_script, context_guid, script, opts}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def new_cdp_session(_transport, _page_guid) do
+    # playwright_ex exposes no CDP surface; prefer server-side fault injection,
+    # or the :windows transport for CDP-based faults.
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def cdp_send(_transport, _session_id, _method, _params) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def expose_binding(_transport, _context_guid, _name, _callback) do
+    # Bindings need the bidirectional event channel the :windows transport adds.
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
   def close_page(transport, page_guid) do
     GenServer.call(transport, {:close_page, page_guid}, 10_000)
   end
+
+  # Allow long-running predicates (wait_for_function) a generous GenServer
+  # call timeout beyond the in-browser timeout.
+  defp call_timeout(opts), do: (opts[:timeout] || 30_000) + 5_000
 
   @impl Playwriter.Transport.Behaviour
   def close_context(transport, context_guid) do
@@ -155,8 +195,15 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call({:goto, frame_guid, url, opts}, _from, state) do
+    # playwright_ex >= 0.5 validates :wait_until as a string
+    # ("load"/"domcontentloaded"/"networkidle"/"commit"), so normalise here to
+    # accept either an atom or a string from callers.
     goto_opts =
-      [url: url, timeout: opts[:timeout] || 30_000, wait_until: opts[:wait_until] || :load]
+      [
+        url: url,
+        timeout: opts[:timeout] || 30_000,
+        wait_until: to_string(opts[:wait_until] || :load)
+      ]
 
     case PlaywrightEx.Frame.goto(frame_guid, goto_opts) do
       {:ok, response} ->
@@ -217,10 +264,44 @@ defmodule Playwriter.Transport.Local do
   end
 
   @impl GenServer
+  def handle_call({:evaluate, frame_guid, expression, opts}, _from, state) do
+    eval_opts =
+      [expression: expression, timeout: opts[:timeout] || 30_000]
+      |> maybe_add(:is_function, opts[:is_function])
+      |> maybe_add(:arg, opts[:arg])
+
+    {:reply, PlaywrightEx.Frame.evaluate(frame_guid, eval_opts), state}
+  end
+
+  @impl GenServer
+  def handle_call({:wait_for_function, frame_guid, expression, opts}, _from, state) do
+    wait_opts =
+      [expression: expression, timeout: opts[:timeout] || 30_000]
+      |> maybe_add(:is_function, opts[:is_function])
+      |> maybe_add(:arg, opts[:arg])
+      |> maybe_add(:polling, opts[:polling])
+
+    case PlaywrightEx.Frame.wait_for_function(frame_guid, wait_opts) do
+      {:ok, result} -> {:reply, {:ok, result}, state}
+      {:error, _} = error -> {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call({:add_init_script, context_guid, script, opts}, _from, state) do
+    init_opts = [source: script, timeout: opts[:timeout] || 30_000]
+
+    case PlaywrightEx.BrowserContext.add_init_script(context_guid, init_opts) do
+      {:ok, _} -> {:reply, :ok, state}
+      {:error, _} = error -> {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
   def handle_call({:close_page, page_guid}, _from, state) do
     # Pages don't have a close method in playwright_ex directly
-    # We send the close message
-    PlaywrightEx.send(%{guid: page_guid, method: :close}, 5_000)
+    # We send the close message (playwright_ex >= 0.5 takes opts, not a bare timeout)
+    PlaywrightEx.send(%{guid: page_guid, method: :close}, timeout: 5_000)
     {:reply, :ok, state}
   catch
     _, _ -> {:reply, :ok, state}
@@ -244,7 +325,7 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call({:send_message, message, timeout}, _from, state) do
-    result = PlaywrightEx.send(message, timeout)
+    result = PlaywrightEx.send(message, timeout: timeout)
     {:reply, result, state}
   end
 
@@ -278,8 +359,26 @@ defmodule Playwriter.Transport.Local do
   end
 
   defp default_executable do
-    # The playwright dependency installs Playwright in priv/static
-    Path.join(["deps", "playwright", "priv", "static", "node_modules", "playwright", "cli.js"])
+    # The :local transport shells out to a Node Playwright driver (cli.js).
+    # Resolution order (first match wins), so the driver is provisioned
+    # reproducibly rather than pinned to a hex artifact:
+    #   1. PLAYWRIGHT_CLI env var (explicit override, e.g. CI)
+    #   2. config :playwriter, :playwright_cli
+    #   3. node_modules/playwright/cli.js under the current project
+    #      (installed by `mix playwriter.setup`, pinned in package.json)
+    #   4. the legacy hex `playwright` package location, if still present
+    System.get_env("PLAYWRIGHT_CLI") ||
+      Application.get_env(:playwriter, :playwright_cli) ||
+      resolve_bundled_cli()
+  end
+
+  defp resolve_bundled_cli do
+    candidates = [
+      Path.join([File.cwd!(), "node_modules", "playwright", "cli.js"]),
+      Path.join(["deps", "playwright", "priv", "static", "node_modules", "playwright", "cli.js"])
+    ]
+
+    Enum.find(candidates, List.first(candidates), &File.exists?/1)
   end
 
   defp build_browser_opts(opts) do

@@ -18,7 +18,6 @@ defmodule Playwriter.Browser.Session do
   """
 
   use GenServer
-  require Logger
 
   alias Playwriter.Transport
   alias Playwriter.Transport.{Local, Remote, WindowsCmd}
@@ -145,12 +144,113 @@ defmodule Playwriter.Browser.Session do
   end
 
   @doc """
+  Evaluate a JavaScript expression in a page's main frame and return the result.
+
+  ## Options
+
+  - `:is_function` - treat the expression as a function body (default: false)
+  - `:arg` - argument passed to the function
+  - `:timeout` - evaluation timeout in ms (default: 30000)
+
+  ## Examples
+
+      {:ok, true} = Session.evaluate(session, page, "crossOriginIsolated")
+      {:ok, 3} = Session.evaluate(session, page, "(a) => a + 1", arg: 2, is_function: true)
+  """
+  @spec evaluate(GenServer.server(), String.t(), String.t(), keyword()) ::
+          {:ok, term()} | {:error, term()}
+  def evaluate(session, page_id, expression, opts \\ []) do
+    GenServer.call(session, {:evaluate, page_id, expression, opts}, call_timeout(opts))
+  end
+
+  @doc """
+  Wait until a JavaScript predicate becomes truthy in a page's main frame.
+
+  ## Options
+
+  - `:is_function` - treat the expression as a function body (default: false)
+  - `:arg` - argument passed to the function
+  - `:polling` - a number of ms, or `"raf"` (default: `"raf"`)
+  - `:timeout` - timeout in ms (default: 30000)
+
+  ## Examples
+
+      :ok = Session.wait_for_function(session, page, "window.__ready === true", timeout: 60_000)
+  """
+  @spec wait_for_function(GenServer.server(), String.t(), String.t(), keyword()) ::
+          :ok | {:error, term()}
+  def wait_for_function(session, page_id, expression, opts \\ []) do
+    GenServer.call(session, {:wait_for_function, page_id, expression, opts}, call_timeout(opts))
+  end
+
+  @doc """
+  Add an init script to a context (identified by the guid returned from
+  `new_context/2`). The script runs before any page scripts on every page and
+  navigation in that context, so it must be added *before* the page is created.
+
+  ## Examples
+
+      {:ok, ctx} = Session.new_context(session, [])
+      :ok = Session.add_init_script(session, ctx, "window.__debug = 1")
+      {:ok, page} = Session.new_page(session, context_guid: ctx)
+  """
+  @spec add_init_script(GenServer.server(), String.t(), String.t(), keyword()) ::
+          :ok | {:error, term()}
+  def add_init_script(session, context_guid, script, opts \\ []) do
+    GenServer.call(session, {:add_init_script, context_guid, script, opts}, 35_000)
+  end
+
+  @doc """
+  Open a Chrome DevTools Protocol session for a page. Returns an opaque CDP
+  session id to use with `cdp_send/4`.
+
+  Only supported by the `:windows` transport; `:local` returns
+  `{:error, :not_supported}`.
+  """
+  @spec new_cdp_session(GenServer.server(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def new_cdp_session(session, page_id) do
+    GenServer.call(session, {:new_cdp_session, page_id}, 35_000)
+  end
+
+  @doc """
+  Send a CDP command over a session opened with `new_cdp_session/2`.
+
+  ## Examples
+
+      {:ok, cdp} = Session.new_cdp_session(session, page)
+      {:ok, _} = Session.cdp_send(session, cdp, "Network.emulateNetworkConditions", %{
+        offline: false, latency: 200, downloadThroughput: 100_000, uploadThroughput: 100_000
+      })
+  """
+  @spec cdp_send(GenServer.server(), String.t(), String.t(), map()) ::
+          {:ok, term()} | {:error, term()}
+  def cdp_send(session, cdp_session_id, method, params \\ %{}) do
+    GenServer.call(session, {:cdp_send, cdp_session_id, method, params}, 35_000)
+  end
+
+  @doc """
+  Expose an Elixir callback to the page as a binding (**experimental**,
+  `:windows`-only). The page can call `window.<name>(...args)` and the callback
+  is invoked with the argument list; its return value is passed back to the page.
+
+  Register the binding on a context (guid from `new_context/2`) before creating
+  the page. `:local`/`:remote` return `{:error, :not_supported}`.
+  """
+  @spec expose_binding(GenServer.server(), String.t(), String.t(), (list() -> term())) ::
+          :ok | {:error, term()}
+  def expose_binding(session, context_guid, name, callback) do
+    GenServer.call(session, {:expose_binding, context_guid, name, callback}, 35_000)
+  end
+
+  @doc """
   Close a page.
   """
   @spec close_page(GenServer.server(), String.t()) :: :ok | {:error, term()}
   def close_page(session, page_id) do
     GenServer.call(session, {:close_page, page_id}, 10_000)
   end
+
+  defp call_timeout(opts), do: (opts[:timeout] || 30_000) + 5_000
 
   @doc """
   Close the entire session.
@@ -264,6 +364,62 @@ defmodule Playwriter.Browser.Session do
   end
 
   @impl GenServer
+  def handle_call({:evaluate, page_id, expression, opts}, _from, state) do
+    case get_page_info(state, page_id) do
+      {:ok, %{frame_guid: frame_guid}} ->
+        result = call_transport(state, :evaluate, [frame_guid, expression, opts])
+        {:reply, result, state}
+
+      error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call({:wait_for_function, page_id, expression, opts}, _from, state) do
+    case get_page_info(state, page_id) do
+      {:ok, %{frame_guid: frame_guid}} ->
+        case call_transport(state, :wait_for_function, [frame_guid, expression, opts]) do
+          {:ok, _} -> {:reply, :ok, state}
+          error -> {:reply, error, state}
+        end
+
+      error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call({:add_init_script, context_guid, script, opts}, _from, state) do
+    result = call_transport(state, :add_init_script, [context_guid, script, opts])
+    {:reply, result, state}
+  end
+
+  @impl GenServer
+  def handle_call({:new_cdp_session, page_id}, _from, state) do
+    case get_page_info(state, page_id) do
+      {:ok, %{page_guid: page_guid}} ->
+        result = call_transport(state, :new_cdp_session, [page_guid])
+        {:reply, result, state}
+
+      error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call({:cdp_send, cdp_session_id, method, params}, _from, state) do
+    result = call_transport(state, :cdp_send, [cdp_session_id, method, params])
+    {:reply, result, state}
+  end
+
+  @impl GenServer
+  def handle_call({:expose_binding, context_guid, name, callback}, _from, state) do
+    result = call_transport(state, :expose_binding, [context_guid, name, callback])
+    {:reply, result, state}
+  end
+
+  @impl GenServer
   def handle_call({:close_page, page_id}, _from, state) do
     case Map.pop(state.pages, page_id) do
       {nil, _} ->
@@ -284,9 +440,11 @@ defmodule Playwriter.Browser.Session do
 
   defp start_session(opts) do
     mode = determine_mode(opts)
-    transport_module = transport_module_for(mode)
+    # A caller may inject a custom transport module (implementing
+    # Playwriter.Transport.Behaviour) - used to unit-test dispatch with a mock.
+    transport_module = opts[:transport_module] || transport_module_for(mode)
 
-    with {:ok, transport} <- start_transport(mode, opts),
+    with {:ok, transport} <- start_transport(transport_module, mode, opts),
          {:ok, browser_guid} <- launch_or_get_browser(transport, transport_module, opts) do
       {:ok,
        %__MODULE__{
@@ -312,11 +470,7 @@ defmodule Playwriter.Browser.Session do
   defp transport_module_for(:remote), do: Remote
   defp transport_module_for(:windows), do: WindowsCmd
 
-  defp start_transport(:local, opts) do
-    Local.start_link(opts)
-  end
-
-  defp start_transport(:remote, opts) do
+  defp start_transport(Remote, _mode, opts) do
     endpoint = opts[:ws_endpoint] || discover_endpoint(opts)
 
     case endpoint do
@@ -325,8 +479,8 @@ defmodule Playwriter.Browser.Session do
     end
   end
 
-  defp start_transport(:windows, opts) do
-    WindowsCmd.start_link(opts)
+  defp start_transport(module, _mode, opts) do
+    module.start_link(opts)
   end
 
   defp discover_endpoint(opts) do
@@ -338,20 +492,18 @@ defmodule Playwriter.Browser.Session do
     end
   end
 
+  # Note: Remote never reaches here - start_transport(Remote, ...) always
+  # returns an error, so the session's `with` short-circuits first.
   defp launch_or_get_browser(transport, Local, opts) do
     browser_type = opts[:browser_type] || :chromium
     browser_opts = Keyword.take(opts, [:headless, :slow_mo, :executable_path])
     Local.launch_browser(transport, browser_type, browser_opts)
   end
 
-  defp launch_or_get_browser(_transport, Remote, _opts) do
-    # Remote transport is not supported - will never reach here since start_link fails
-    {:error, :not_supported}
-  end
-
-  defp launch_or_get_browser(transport, WindowsCmd, opts) do
+  defp launch_or_get_browser(transport, module, opts) do
+    # WindowsCmd + any injected transport module.
     browser_opts = Keyword.take(opts, [:headless])
-    WindowsCmd.launch_browser(transport, :chromium, browser_opts)
+    module.launch_browser(transport, opts[:browser_type] || :chromium, browser_opts)
   end
 
   defp create_context(state, opts) do

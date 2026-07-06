@@ -4,6 +4,20 @@ defmodule Playwriter.Transport.WindowsCmd do
 
   This transport avoids WSL2 networking issues by running Node.js Playwright
   directly on Windows via PowerShell, communicating through stdin/stdout.
+
+  ## Wire protocol
+
+  Requests are newline-delimited JSON `{id, method, params}`; responses are
+  `{id, result}` or `{id, error}`. Results carry an explicit envelope:
+
+  - `{"json": v}` - an arbitrary evaluated value (`evaluate`, `cdp_send`)
+  - `{"value_b64": b}` - base64 binary (`screenshot`), decoded to a binary
+  - `{"value": s}` - a plain string (`content`)
+  - `{"guid": g}` - an object handle (context/page/CDP session)
+  - `{"ok": true}` - an action with no return value
+
+  Unsolicited `{"event": "binding", ...}` messages (from `expose_binding/4`)
+  are routed to the registered Elixir callback rather than dropped.
   """
 
   @behaviour Playwriter.Transport.Behaviour
@@ -11,7 +25,7 @@ defmodule Playwriter.Transport.WindowsCmd do
   use GenServer
   require Logger
 
-  defstruct [:port, :request_id, :pending, :browser_ready]
+  defstruct [:port, :request_id, :pending, :browser_ready, buffer: "", bindings: %{}]
 
   @node_script """
   const { chromium } = require('playwright');
@@ -20,6 +34,12 @@ defmodule Playwriter.Transport.WindowsCmd do
   let browser = null;
   let contexts = {};
   let pages = {};
+  let cdpSessions = {};
+  let cdpSeq = 0;
+  let pendingBindings = {};
+  let bindingSeq = 0;
+
+  function emit(obj) { console.log(JSON.stringify(obj)); }
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
 
@@ -35,14 +55,15 @@ defmodule Playwriter.Transport.WindowsCmd do
           result = { guid: 'browser-1' };
           break;
 
-        case 'newContext':
+        case 'newContext': {
           const ctx = await browser.newContext(cmd.params || {});
           const ctxId = 'ctx-' + Object.keys(contexts).length;
           contexts[ctxId] = ctx;
           result = { guid: ctxId };
           break;
+        }
 
-        case 'newPage':
+        case 'newPage': {
           const context = contexts[cmd.params.contextId] || await browser.newContext();
           if (!contexts[cmd.params.contextId]) contexts[cmd.params.contextId] = context;
           const page = await context.newPage();
@@ -50,6 +71,7 @@ defmodule Playwriter.Transport.WindowsCmd do
           pages[pageId] = page;
           result = { guid: pageId, mainFrame: { guid: pageId } };
           break;
+        }
 
         case 'goto':
           await pages[cmd.params.pageId].goto(cmd.params.url, { timeout: cmd.params.timeout || 30000 });
@@ -60,10 +82,70 @@ defmodule Playwriter.Transport.WindowsCmd do
           result = { value: await pages[cmd.params.pageId].content() };
           break;
 
-        case 'screenshot':
-          const buf = await pages[cmd.params.pageId].screenshot(cmd.params);
-          result = { value: buf.toString('base64') };
+        case 'evaluate': {
+          const page = pages[cmd.params.pageId];
+          const fn = cmd.params.isFunction ? eval('(' + cmd.params.expression + ')') : cmd.params.expression;
+          const r = await page.evaluate(fn, cmd.params.arg);
+          result = { json: r === undefined ? null : r };
           break;
+        }
+
+        case 'waitForFunction': {
+          const page = pages[cmd.params.pageId];
+          const fn = cmd.params.isFunction ? eval('(' + cmd.params.expression + ')') : cmd.params.expression;
+          await page.waitForFunction(fn, cmd.params.arg, {
+            timeout: cmd.params.timeout || 30000,
+            polling: cmd.params.polling || 'raf'
+          });
+          result = { ok: true };
+          break;
+        }
+
+        case 'addInitScript':
+          await contexts[cmd.params.contextId].addInitScript({ content: cmd.params.script });
+          result = { ok: true };
+          break;
+
+        case 'newCDPSession': {
+          const page = pages[cmd.params.pageId];
+          const session = await page.context().newCDPSession(page);
+          const sid = 'cdp-' + (++cdpSeq);
+          cdpSessions[sid] = session;
+          result = { guid: sid };
+          break;
+        }
+
+        case 'cdpSend': {
+          const r = await cdpSessions[cmd.params.sessionId].send(cmd.params.cdpMethod, cmd.params.cdpParams || {});
+          result = { json: r === undefined ? null : r };
+          break;
+        }
+
+        case 'exposeBinding': {
+          const ctx = contexts[cmd.params.contextId];
+          const name = cmd.params.name;
+          await ctx.exposeBinding(name, async (source, ...args) => {
+            const callId = 'call-' + (++bindingSeq);
+            const promise = new Promise((resolve) => { pendingBindings[callId] = resolve; });
+            emit({ event: 'binding', name: name, callId: callId, args: args });
+            return await promise;
+          });
+          result = { ok: true };
+          break;
+        }
+
+        case 'bindingResult': {
+          const resolve = pendingBindings[cmd.params.callId];
+          if (resolve) { resolve(cmd.params.value); delete pendingBindings[cmd.params.callId]; }
+          result = { ok: true };
+          break;
+        }
+
+        case 'screenshot': {
+          const buf = await pages[cmd.params.pageId].screenshot(cmd.params);
+          result = { value_b64: buf.toString('base64') };
+          break;
+        }
 
         case 'click':
           await pages[cmd.params.pageId].click(cmd.params.selector, { timeout: cmd.params.timeout || 30000 });
@@ -94,16 +176,16 @@ defmodule Playwriter.Transport.WindowsCmd do
           result = { error: 'Unknown method: ' + cmd.method };
       }
 
-      console.log(JSON.stringify({ id: cmd.id, result }));
+      emit({ id: cmd.id, result });
     } catch (err) {
-      console.log(JSON.stringify({ id: cmd?.id || 0, error: err.message }));
+      emit({ id: cmd?.id || 0, error: err.message });
     }
   }
 
   rl.on('line', handleCommand);
   rl.on('close', () => process.exit(0));
 
-  console.log(JSON.stringify({ ready: true }));
+  emit({ ready: true });
   """
 
   # Client API
@@ -159,6 +241,40 @@ defmodule Playwriter.Transport.WindowsCmd do
   end
 
   @impl Playwriter.Transport.Behaviour
+  def evaluate(transport, frame_guid, expression, opts \\ []) do
+    GenServer.call(transport, {:evaluate, frame_guid, expression, opts}, call_timeout(opts))
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def wait_for_function(transport, frame_guid, expression, opts \\ []) do
+    GenServer.call(
+      transport,
+      {:wait_for_function, frame_guid, expression, opts},
+      call_timeout(opts)
+    )
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def add_init_script(transport, context_guid, script, opts \\ []) do
+    GenServer.call(transport, {:add_init_script, context_guid, script, opts}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def new_cdp_session(transport, page_guid) do
+    GenServer.call(transport, {:new_cdp_session, page_guid}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def cdp_send(transport, session_id, method, params) do
+    GenServer.call(transport, {:cdp_send, session_id, method, params}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def expose_binding(transport, context_guid, name, callback) do
+    GenServer.call(transport, {:expose_binding, context_guid, name, callback}, 35_000)
+  end
+
+  @impl Playwriter.Transport.Behaviour
   def close_page(transport, page_guid) do
     GenServer.call(transport, {:close_page, page_guid}, 10_000)
   end
@@ -184,6 +300,8 @@ defmodule Playwriter.Transport.WindowsCmd do
   def stop(transport) do
     GenServer.stop(transport, :normal)
   end
+
+  defp call_timeout(opts), do: (opts[:timeout] || 30_000) + 5_000
 
   # Server callbacks
 
@@ -322,6 +440,64 @@ defmodule Playwriter.Transport.WindowsCmd do
   end
 
   @impl GenServer
+  def handle_call({:evaluate, page_id, expression, opts}, from, state) do
+    send_command(
+      state,
+      "evaluate",
+      %{
+        pageId: page_id,
+        expression: expression,
+        isFunction: opts[:is_function] || false,
+        arg: opts[:arg]
+      },
+      from
+    )
+  end
+
+  @impl GenServer
+  def handle_call({:wait_for_function, page_id, expression, opts}, from, state) do
+    send_command(
+      state,
+      "waitForFunction",
+      %{
+        pageId: page_id,
+        expression: expression,
+        isFunction: opts[:is_function] || false,
+        arg: opts[:arg],
+        timeout: opts[:timeout],
+        polling: opts[:polling]
+      },
+      from
+    )
+  end
+
+  @impl GenServer
+  def handle_call({:add_init_script, context_id, script, _opts}, from, state) do
+    send_command(state, "addInitScript", %{contextId: context_id, script: script}, from)
+  end
+
+  @impl GenServer
+  def handle_call({:new_cdp_session, page_id}, from, state) do
+    send_command(state, "newCDPSession", %{pageId: page_id}, from)
+  end
+
+  @impl GenServer
+  def handle_call({:cdp_send, session_id, method, params}, from, state) do
+    send_command(
+      state,
+      "cdpSend",
+      %{sessionId: session_id, cdpMethod: method, cdpParams: params},
+      from
+    )
+  end
+
+  @impl GenServer
+  def handle_call({:expose_binding, context_id, name, callback}, from, state) do
+    state = %{state | bindings: Map.put(state.bindings, name, callback)}
+    send_command(state, "exposeBinding", %{contextId: context_id, name: name}, from)
+  end
+
+  @impl GenServer
   def handle_call({:close_page, page_id}, from, state) do
     send_command(state, "closePage", %{pageId: page_id}, from)
   end
@@ -342,32 +518,15 @@ defmodule Playwriter.Transport.WindowsCmd do
   end
 
   @impl GenServer
+  def handle_cast({:binding_result, call_id, value}, state) do
+    {:noreply, send_command_noreply(state, "bindingResult", %{callId: call_id, value: value})}
+  end
+
+  @impl GenServer
   def handle_info({port, {:data, data}}, %{port: port} = state) do
-    case Jason.decode(String.trim(data)) do
-      {:ok, %{"id" => id, "result" => result}} ->
-        case Map.pop(state.pending, id) do
-          {nil, _} ->
-            {:noreply, state}
-
-          {from, pending} ->
-            reply = process_result(result)
-            GenServer.reply(from, reply)
-            {:noreply, %{state | pending: pending}}
-        end
-
-      {:ok, %{"id" => id, "error" => error}} ->
-        case Map.pop(state.pending, id) do
-          {nil, _} ->
-            {:noreply, state}
-
-          {from, pending} ->
-            GenServer.reply(from, {:error, error})
-            {:noreply, %{state | pending: pending}}
-        end
-
-      _ ->
-        {:noreply, state}
-    end
+    {messages, buffer} = split_messages(state.buffer, data)
+    new_state = Enum.reduce(messages, %{state | buffer: buffer}, &route_message/2)
+    {:noreply, new_state}
   end
 
   @impl GenServer
@@ -391,27 +550,110 @@ defmodule Playwriter.Transport.WindowsCmd do
 
   defp send_command(state, method, params, from) do
     id = state.request_id
-    cmd = Jason.encode!(%{id: id, method: method, params: params})
-    Port.command(state.port, cmd <> "\n")
+    Port.command(state.port, encode_command(id, method, params) <> "\n")
     pending = Map.put(state.pending, id, from)
     {:noreply, %{state | request_id: id + 1, pending: pending}}
   end
 
-  defp process_result(%{"guid" => guid} = result) do
-    {:ok, (Map.get(result, "mainFrame") && %{guid: guid, main_frame: %{guid: guid}}) || guid}
+  # Fire-and-forget command (no caller awaits the reply), used to answer a
+  # page->Elixir binding call. Its {ok:true} response has no pending entry and
+  # is ignored by the router.
+  defp send_command_noreply(state, method, params) do
+    id = state.request_id
+    Port.command(state.port, encode_command(id, method, params) <> "\n")
+    %{state | request_id: id + 1}
   end
 
-  defp process_result(%{"value" => value}) when is_binary(value) do
-    # Could be base64 screenshot or HTML content
-    if String.starts_with?(value, "iVBOR") or String.starts_with?(value, "/9j/") do
-      {:ok, Base.decode64!(value)}
-    else
-      {:ok, value}
+  defp route_message(msg, state) do
+    case classify_message(msg) do
+      {:response, id, result} -> reply_pending(state, id, process_result(result))
+      {:error_response, id, error} -> reply_pending(state, id, {:error, error})
+      {:binding, name, call_id, args} -> dispatch_binding(state, name, call_id, args)
+      :ignore -> state
     end
   end
 
-  defp process_result(%{"ok" => true}), do: :ok
-  defp process_result(result), do: {:ok, result}
+  defp reply_pending(state, id, reply) do
+    case Map.pop(state.pending, id) do
+      {nil, _} ->
+        state
+
+      {from, pending} ->
+        GenServer.reply(from, reply)
+        %{state | pending: pending}
+    end
+  end
+
+  defp dispatch_binding(state, name, call_id, args) do
+    case Map.get(state.bindings, name) do
+      nil ->
+        Logger.warning("Received binding event for unregistered binding: #{inspect(name)}")
+        state
+
+      callback ->
+        transport = self()
+
+        Task.start(fn ->
+          value = callback.(args)
+          GenServer.cast(transport, {:binding_result, call_id, value})
+        end)
+
+        state
+    end
+  end
+
+  @doc false
+  # Encode an outbound command to a JSON line (no trailing newline).
+  def encode_command(id, method, params) do
+    Jason.encode!(%{id: id, method: method, params: params})
+  end
+
+  @doc false
+  # Split a byte-stream chunk (prepended with any buffered partial line) into
+  # complete decoded JSON messages plus the remaining partial line. Stray
+  # non-JSON stdout lines are dropped.
+  def split_messages(buffer, data) do
+    parts = String.split(buffer <> data, "\n")
+    {complete, [partial]} = Enum.split(parts, -1)
+
+    messages =
+      complete
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.map(&decode_line/1)
+      |> Enum.reject(&is_nil/1)
+
+    {messages, partial}
+  end
+
+  defp decode_line(line) do
+    case Jason.decode(line) do
+      {:ok, msg} -> msg
+      {:error, _} -> nil
+    end
+  end
+
+  @doc false
+  # Classify a decoded protocol message into a routing action.
+  def classify_message(%{"id" => id, "result" => result}), do: {:response, id, result}
+  def classify_message(%{"id" => id, "error" => error}), do: {:error_response, id, error}
+
+  def classify_message(%{"event" => "binding", "name" => name, "callId" => call_id} = msg),
+    do: {:binding, name, call_id, Map.get(msg, "args", [])}
+
+  def classify_message(_), do: :ignore
+
+  @doc false
+  # Map a result envelope to the transport's public return shape.
+  def process_result(%{"guid" => guid} = result) do
+    {:ok, (Map.get(result, "mainFrame") && %{guid: guid, main_frame: %{guid: guid}}) || guid}
+  end
+
+  def process_result(%{"json" => value}), do: {:ok, value}
+  def process_result(%{"value_b64" => b64}), do: {:ok, Base.decode64!(b64)}
+  def process_result(%{"value" => value}), do: {:ok, value}
+  def process_result(%{"ok" => true}), do: :ok
+  def process_result(result), do: {:ok, result}
 
   defp write_script_to_windows do
     # Write to Windows temp via /mnt/c path
@@ -426,7 +668,7 @@ defmodule Playwriter.Transport.WindowsCmd do
 
     unless File.exists?(package_json_path) do
       package_json =
-        ~s|{"name":"playwriter-server","private":true,"dependencies":{"playwright":"^1.40.0"}}|
+        ~s|{"name":"playwriter-server","private":true,"dependencies":{"playwright":"^1.49.0"}}|
 
       File.write!(package_json_path, package_json)
       Logger.info("Created package.json, you may need to run: cd #{script_dir} && npm install")
@@ -467,4 +709,8 @@ defmodule Playwriter.Transport.WindowsCmd do
       "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
     end
   end
+
+  @doc false
+  # Exposed for tests + tooling (e.g. `node --check`): the embedded Node script.
+  def node_script, do: @node_script
 end

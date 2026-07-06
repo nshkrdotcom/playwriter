@@ -28,3 +28,7 @@ windows_cmd_screenshot.png
 
 # Dialyzer PLT files
 /priv/plts/
+
+# Node Playwright driver for the :local transport (provisioned via mix playwriter.setup).
+# The package.json + package-lock.json are committed; node_modules is not.
+/node_modules/

@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-06
+
+Adds the browser-automation surface a dev/test harness needs: arbitrary JS
+evaluation, predicate waiting, context init scripts, CDP-based network fault
+injection, a clean binary-return contract, and (experimental) page-to-Elixir
+bindings. Every new verb is a transport-behaviour callback implemented across
+`:windows`, `:local`, and `:remote`.
+
+### Added
+- New transport callbacks + `Playwriter.Browser.Session` functions:
+  - `evaluate/4` - run arbitrary JavaScript in a page's main frame and get the
+    serialized result (`{"json": v}` envelope on the Windows wire protocol,
+    `PlaywrightEx.Frame.evaluate/2` on `:local`).
+  - `wait_for_function/4` - block until a JavaScript predicate is truthy
+    (`:polling`/`:timeout` options).
+  - `add_init_script/4` - install a context-scoped script that runs before any
+    page script on every page/navigation (must precede `new_page`).
+  - `new_cdp_session/2` + `cdp_send/4` - open a Chrome DevTools Protocol session
+    for a page and send CDP commands (e.g. `Network.emulateNetworkConditions`,
+    `Network.setBlockedURLs`). **Windows transport only**; `:local` returns
+    `{:error, :not_supported}` (playwright_ex exposes no CDP surface).
+  - `expose_binding/4` - **experimental**, Windows-only: let a page call back
+    into Elixir via `window.<name>(...args)`. Uses a new bidirectional binding
+    event on the stdio bridge. The request/response verbs are unaffected; the
+    full page-to-Elixir round trip is validated on a Windows box (see the
+    `:requires_windows_server` tests). Prefer polling with `evaluate/4` +
+    `wait_for_function/4` where possible.
+- Thin `Playwriter.evaluate/3` and `Playwriter.wait_for_function/3` facade
+  wrappers for use inside `with_browser/2`.
+- Explicit `{"value_b64": ...}` binary-return contract (see Changed).
+- `Playwriter.Browser.Session` accepts a `:transport_module` option to inject a
+  custom transport (used to unit-test dispatch with a Mox behaviour mock).
+- `AGENTS.md` - working guide for agents/contributors; shipped in the hex package.
+- Committed `package.json` pinning the Node Playwright driver, plus reproducible
+  `mix playwriter.setup` provisioning (`npm ci` + `npx playwright install`).
+
+### Changed
+- **Binary returns are now explicit.** The Windows transport returns screenshots
+  (and any binary) as `{"value_b64": <base64>}`, decoded with `Base.decode64!/1`.
+  This replaces the fragile magic-byte sniffing in `process_result/1` that
+  guessed whether a `{"value": ...}` string was a PNG/JPEG or HTML. `{"value"}`
+  is now always a plain string (`content`).
+- The Windows transport reads its stdio stream with proper line-buffering, so
+  multiple JSON messages in one chunk (and partial lines split across chunks)
+  are handled, and unsolicited `binding` events are routed rather than dropped.
+- The `:local` transport resolves its Node Playwright driver from
+  `PLAYWRIGHT_CLI` / `config :playwriter, :playwright_cli` /
+  `node_modules/playwright/cli.js` instead of a fixed hex-package path, so the
+  driver is provisioned reproducibly.
+- `Playwriter.Transport.WindowsCmd` is now documented in the generated docs
+  (`groups_for_modules`).
+
+### Dependencies
+- Bumped `playwright_ex` `~> 0.3.2` -> `~> 0.7` (0.7.1). This provides native
+  `Frame.wait_for_function/2` and `BrowserContext.add_init_script/2` helpers, so
+  the `:local` implementations use first-class calls rather than a raw escape
+  hatch. (Adapted `Frame.goto`'s `:wait_until` to the string form 0.5+ requires.)
+- Bumped `ex_doc` `~> 0.34` -> `~> 0.40` (0.40.3), and `credo`/`jason`/
+  `supertester`/`mox` constraints to current.
+- **Removed `websockex`** - it only served the dead `:remote` WebSocket transport
+  (Hyper-V-firewall-blocked) and nothing else used it. (It also blocked
+  compilation on recent Elixir/OTP.)
+- The embedded Windows-side npm Playwright pin moved `^1.40.0` -> `^1.49.0`.
+
 ## [0.1.0] - 2026-02-03
 
 ### Changed

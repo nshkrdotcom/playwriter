@@ -37,16 +37,22 @@ Add to your `mix.exs`:
 
 ```elixir
 def deps do
-  [{:playwriter, "~> 0.1.0"}]
+  [{:playwriter, "~> 0.2.0"}]
 end
 ```
 
-Then run setup:
+Then run setup (installs the Node Playwright driver + Chromium for the `:local`
+transport, pinned in the project's `package.json`):
 
 ```bash
 mix deps.get
-mix playwriter.setup
+mix playwriter.setup            # add --with-deps to also install OS libs (needs sudo)
 ```
+
+The `:local` transport resolves the driver from `PLAYWRIGHT_CLI`,
+`config :playwriter, :playwright_cli`, or `node_modules/playwright/cli.js` (in
+that order). `:windows` mode needs no local setup — it provisions its own Node
+Playwright on the Windows side.
 
 ### Basic Usage (Local/Headless)
 
@@ -100,6 +106,68 @@ end)
 ```
 
 The browser stays open for the entire session. You see every action happen.
+
+## Browser Automation Capabilities
+
+Beyond navigation and form interaction, Playwriter exposes the surface a
+dev/test harness needs. Each is a `Playwriter.Browser.Session` function (and,
+for the page-scoped ones, a `with_browser/2` facade wrapper):
+
+```elixir
+{:ok, session} = Playwriter.Browser.Session.start_link(mode: :windows)
+alias Playwriter.Browser.Session
+
+# Evaluate arbitrary JavaScript and get the serialized result
+{:ok, ctx} = Session.new_context(session, [])
+
+# Install a context-scoped init script BEFORE the page loads
+:ok = Session.add_init_script(session, ctx, "window.__debug = 1")
+
+{:ok, page} = Session.new_page(session, context_guid: ctx)
+:ok = Session.goto(session, page, "http://localhost:4000")
+
+{:ok, true}  = Session.evaluate(session, page, "crossOriginIsolated")
+{:ok, title} = Session.evaluate(session, page, "document.title")
+
+# Wait for a predicate to become truthy (polling / timeout)
+:ok = Session.wait_for_function(session, page, "window.__ready === true", timeout: 60_000)
+```
+
+Inside `with_browser/2` the page-scoped verbs have thin wrappers:
+
+```elixir
+Playwriter.with_browser([mode: :windows], fn ctx ->
+  :ok = Playwriter.goto(ctx, "http://localhost:4000")
+  :ok = Playwriter.wait_for_function(ctx, "document.readyState === 'complete'")
+  {:ok, value} = Playwriter.evaluate(ctx, "window.__souleqDebug.snapshot()")
+  value
+end)
+```
+
+### CDP (network fault injection) — `:windows` only
+
+```elixir
+{:ok, cdp} = Session.new_cdp_session(session, page)
+{:ok, _}   = Session.cdp_send(session, cdp, "Network.emulateNetworkConditions", %{
+  offline: false, latency: 200, downloadThroughput: 100_000, uploadThroughput: 100_000
+})
+{:ok, _}   = Session.cdp_send(session, cdp, "Network.setBlockedURLs", %{urls: ["*://ads.example/*"]})
+```
+
+The `:local` transport has no CDP (`playwright_ex` exposes none) and returns
+`{:error, :not_supported}`; use server-side fault injection there.
+
+### Page → Elixir callbacks (experimental, `:windows` only)
+
+```elixir
+:ok = Session.expose_binding(session, ctx, "report", fn [payload] ->
+  send(self(), {:from_page, payload}); :ack
+end)
+# page can now call window.report(data)
+```
+
+Binary returns (e.g. `screenshot/3`) use an explicit base64 contract and come
+back as decoded binaries. See the **Automation Capabilities** guide for details.
 
 ## Three Modes
 

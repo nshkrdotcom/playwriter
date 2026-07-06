@@ -84,6 +84,36 @@ defmodule Playwriter.Transport.Remote do
   end
 
   @impl Playwriter.Transport.Behaviour
+  def evaluate(_transport, _frame_guid, _expression, _opts \\ []) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def wait_for_function(_transport, _frame_guid, _expression, _opts \\ []) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def add_init_script(_transport, _context_guid, _script, _opts \\ []) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def new_cdp_session(_transport, _page_guid) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def cdp_send(_transport, _session_id, _method, _params) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
+  def expose_binding(_transport, _context_guid, _name, _callback) do
+    {:error, :not_supported}
+  end
+
+  @impl Playwriter.Transport.Behaviour
   def close_page(_transport, _page_guid) do
     {:error, :not_supported}
   end

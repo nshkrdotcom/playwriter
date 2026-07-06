@@ -264,8 +264,55 @@ defmodule Playwriter do
   end
 
   @doc """
+  Evaluate a JavaScript expression in the current page and return the result.
+
+  Use inside `with_browser/2` callback.
+
+  ## Options
+
+  - `:is_function` - treat the expression as a function body (default: false)
+  - `:arg` - argument passed to the function
+  - `:timeout` - evaluation timeout in ms (default: 30000)
+
+  ## Examples
+
+      Playwriter.with_browser(fn ctx ->
+        Playwriter.goto(ctx, "https://example.com")
+        {:ok, title} = Playwriter.evaluate(ctx, "document.title")
+      end)
+  """
+  @spec evaluate(context(), String.t(), keyword()) :: {:ok, term()} | {:error, term()}
+  def evaluate(ctx, expression, opts \\ []) do
+    Session.evaluate(ctx.session, ctx.page, expression, opts)
+  end
+
+  @doc """
+  Wait until a JavaScript predicate becomes truthy in the current page.
+
+  Use inside `with_browser/2` callback.
+
+  ## Options
+
+  - `:is_function` - treat the expression as a function body (default: false)
+  - `:arg` - argument passed to the function
+  - `:polling` - a number of ms, or `"raf"` (default: `"raf"`)
+  - `:timeout` - timeout in ms (default: 30000)
+
+  ## Examples
+
+      Playwriter.with_browser(fn ctx ->
+        Playwriter.goto(ctx, "https://example.com")
+        :ok = Playwriter.wait_for_function(ctx, "document.readyState === 'complete'")
+      end)
+  """
+  @spec wait_for_function(context(), String.t(), keyword()) :: :ok | {:error, term()}
+  def wait_for_function(ctx, expression, opts \\ []) do
+    Session.wait_for_function(ctx.session, ctx.page, expression, opts)
+  end
+
+  @doc """
   Returns the library version.
   """
   @spec version() :: String.t()
-  def version, do: "0.1.0"
+  def version, do: "0.2.0"
 end

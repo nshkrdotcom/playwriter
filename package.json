@@ -1,0 +1,9 @@
+{
+  "name": "playwriter-local-driver",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Node Playwright driver for Playwriter's :local (headless) transport. Pinned to the version playwright_ex targets. Install with `mix playwriter.setup` or `npm ci && npx playwright install chromium`.",
+  "dependencies": {
+    "playwright": "~1.61.0"
+  }
+}

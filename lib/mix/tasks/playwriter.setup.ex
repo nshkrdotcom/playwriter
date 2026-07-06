@@ -1,19 +1,26 @@
 defmodule Mix.Tasks.Playwriter.Setup do
   @moduledoc """
-  Installs Playwright for local browser automation.
+  Installs the Node Playwright driver for the `:local` (headless) transport.
 
   ## Usage
 
       mix playwriter.setup
 
-  This will:
-  1. Install Playwright npm dependencies in deps/playwright/priv/static
-  2. Download Chromium browser
+  This will, in the project root (using the committed `package.json`, which
+  pins the Playwright version `playwright_ex` targets):
+
+  1. Install the Playwright npm package into `node_modules/`
+  2. Download the matching Chromium browser
+
+  The `:local` transport then resolves the driver from
+  `node_modules/playwright/cli.js` (override with `PLAYWRIGHT_CLI` or
+  `config :playwriter, :playwright_cli`).
 
   ## Options
 
       mix playwriter.setup --browser firefox    # Install Firefox instead
       mix playwriter.setup --browser all        # Install all browsers
+      mix playwriter.setup --with-deps          # Also install OS libs (needs sudo)
 
   ## After Setup
 
@@ -21,49 +28,55 @@ defmodule Mix.Tasks.Playwriter.Setup do
 
       Playwriter.fetch_html("https://example.com")
 
-  For WSL-to-Windows (remote mode), no local setup is needed.
-  Just start the Windows server and use `mode: :remote`.
+  For WSL-to-Windows (`mode: :windows`), no local setup is needed - that
+  transport provisions its own Node Playwright on the Windows side.
   """
 
   use Mix.Task
 
-  @shortdoc "Install Playwright for local browser automation"
-  @playwright_path Path.join(["deps", "playwright", "priv", "static"])
+  @shortdoc "Install the Node Playwright driver for :local browser automation"
+  @project_root "."
 
   @impl Mix.Task
   def run(args) do
-    {opts, _, _} = OptionParser.parse(args, switches: [browser: :string])
+    {opts, _, _} = OptionParser.parse(args, switches: [browser: :string, with_deps: :boolean])
     browser = opts[:browser] || "chromium"
 
     Mix.shell().info("Setting up Playwright for local browser automation...")
     Mix.shell().info("")
 
-    verify_deps_exist!()
+    verify_manifest_exists!()
     install_npm_deps!()
-    install_browser!(browser)
+    install_browser!(browser, opts[:with_deps])
     print_linux_hint(browser)
     print_success_message()
   end
 
-  defp verify_deps_exist! do
-    unless File.dir?(@playwright_path) do
-      Mix.shell().error("Error: playwright dependency not found.")
-      Mix.shell().error("Run `mix deps.get` first.")
+  defp verify_manifest_exists! do
+    unless File.exists?(Path.join(@project_root, "package.json")) do
+      Mix.shell().error("Error: package.json not found in the project root.")
+      Mix.shell().error("This task installs the Node Playwright driver pinned there.")
       System.halt(1)
     end
   end
 
   defp install_npm_deps! do
-    Mix.shell().info("Step 1: Installing npm dependencies...")
+    Mix.shell().info("Step 1: Installing the Playwright npm package...")
+    # Prefer `npm ci` (reproducible, honours package-lock.json) when a lockfile
+    # is present; fall back to `npm install` for a first-time setup.
+    npm_args =
+      if File.exists?(Path.join(@project_root, "package-lock.json")),
+        do: ["ci"],
+        else: ["install"]
 
-    case System.cmd("npm", ["install"], cd: @playwright_path, stderr_to_stdout: true) do
+    case System.cmd("npm", npm_args, cd: @project_root, stderr_to_stdout: true) do
       {output, 0} ->
         Mix.shell().info(output)
         Mix.shell().info("npm dependencies installed.")
         Mix.shell().info("")
 
       {output, code} ->
-        Mix.shell().error("npm install failed (exit code #{code}):")
+        Mix.shell().error("npm #{hd(npm_args)} failed (exit code #{code}):")
         Mix.shell().error(output)
         Mix.shell().error("")
         Mix.shell().error("Make sure Node.js and npm are installed:")
@@ -72,13 +85,14 @@ defmodule Mix.Tasks.Playwriter.Setup do
     end
   end
 
-  defp install_browser!(browser) do
+  defp install_browser!(browser, with_deps?) do
     browser_arg = if browser == "all", do: [], else: [browser]
-    npx_args = ["playwright", "install"] ++ browser_arg
+    deps_arg = if with_deps?, do: ["--with-deps"], else: []
+    npx_args = ["playwright", "install"] ++ deps_arg ++ browser_arg
 
     Mix.shell().info("Step 2: Installing #{browser} browser...")
 
-    case System.cmd("npx", npx_args, cd: @playwright_path, stderr_to_stdout: true) do
+    case System.cmd("npx", npx_args, cd: @project_root, stderr_to_stdout: true) do
       {output, 0} ->
         Mix.shell().info(output)
         Mix.shell().info("Browser installed successfully.")
@@ -95,8 +109,9 @@ defmodule Mix.Tasks.Playwriter.Setup do
     case :os.type() do
       {:unix, :linux} ->
         Mix.shell().info("Step 3: Checking system dependencies...")
-        Mix.shell().info("If you see browser launch errors, run:")
-        Mix.shell().info("  npx playwright install-deps #{browser}")
+        Mix.shell().info("If you see browser launch errors about missing libraries, run:")
+        Mix.shell().info("  npx playwright install-deps #{browser}   # (needs sudo)")
+        Mix.shell().info("  or re-run: mix playwriter.setup --with-deps")
         Mix.shell().info("")
 
       _ ->
