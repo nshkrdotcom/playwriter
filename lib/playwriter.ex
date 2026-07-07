@@ -314,5 +314,5 @@ defmodule Playwriter do
   Returns the library version.
   """
   @spec version() :: String.t()
-  def version, do: "0.2.0"
+  def version, do: "0.3.0"
 end
