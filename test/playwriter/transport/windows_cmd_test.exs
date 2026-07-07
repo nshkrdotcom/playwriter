@@ -157,4 +157,20 @@ defmodule Playwriter.Transport.WindowsCmdTest do
       end
     end
   end
+
+  describe "get_windows_user/0" do
+    test "config :playwriter, :windows_user overrides detection" do
+      original = Application.get_env(:playwriter, :windows_user)
+      Application.put_env(:playwriter, :windows_user, "override-user")
+
+      on_exit(fn ->
+        case original do
+          nil -> Application.delete_env(:playwriter, :windows_user)
+          value -> Application.put_env(:playwriter, :windows_user, value)
+        end
+      end)
+
+      assert WindowsCmd.get_windows_user() == "override-user"
+    end
+  end
 end

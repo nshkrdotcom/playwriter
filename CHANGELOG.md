@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `:windows` transport Windows-account detection. The transport locates its
+  script dir under `C:\Users\<user>\AppData\Local\Temp`, but the user was
+  detected by taking the first plausible `/mnt/c/Users/` entry - on machines
+  with more than one real account (e.g. a sandbox account that sorts first)
+  it picked the wrong user and failed with a permission error. Resolution is
+  now: `config :playwriter, :windows_user` (new explicit override) ->
+  PowerShell `$env:USERNAME` (authoritative for the live session) -> the old
+  directory heuristic as a last resort.
+
 ## [0.2.0] - 2026-07-06
 
 Adds the browser-automation surface a dev/test harness needs: arbitrary JS

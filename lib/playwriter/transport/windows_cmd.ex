@@ -713,9 +713,41 @@ defmodule Playwriter.Transport.WindowsCmd do
     {script_dir, "transport.js"}
   end
 
-  defp get_windows_user do
-    # Detect Windows user from /mnt/c/Users/ directory
-    # cmd.exe echo %USERNAME% returns garbage from WSL due to UNC path handling
+  @doc false
+  # Resolve the Windows account whose %TEMP% hosts the transport script.
+  # Order:
+  #   1. `config :playwriter, :windows_user` - explicit override.
+  #   2. PowerShell `$env:USERNAME` - authoritative for the live session.
+  #      (cmd.exe `echo %USERNAME%` returns garbage from WSL due to UNC
+  #      path handling; PowerShell does not.)
+  #   3. First plausible `/mnt/c/Users/` entry - the original heuristic,
+  #      kept as a last resort. It picks the WRONG account on machines
+  #      with more than one real user dir (e.g. a sandbox account that
+  #      sorts first), which is why 1 and 2 exist.
+  def get_windows_user do
+    Application.get_env(:playwriter, :windows_user) ||
+      powershell_username() ||
+      users_dir_heuristic()
+  end
+
+  defp powershell_username do
+    case System.cmd(
+           find_powershell_exe(),
+           ["-NoProfile", "-NonInteractive", "-Command", "$env:USERNAME"],
+           stderr_to_stdout: true
+         ) do
+      {output, 0} ->
+        name = output |> String.replace("\r", "") |> String.trim()
+        if name != "" and File.dir?("/mnt/c/Users/#{name}"), do: name
+
+      _ ->
+        nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp users_dir_heuristic do
     case File.ls("/mnt/c/Users") do
       {:ok, entries} ->
         entries
