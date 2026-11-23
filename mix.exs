@@ -59,7 +59,7 @@ defmodule Playwriter.MixProject do
       # environment level (npm `playwright`, or the `playwright` hex package's
       # bundled cli.js) rather than pinned here - matching playwright_ex's own
       # "executable:" convention and avoiding the gun/cowlib toolchain coupling.
-      {:playwright_ex, "~> 0.7"},
+      {:playwright, "~> 1.65.0-rc.4", hex: :playwright_ex},
       {:nimble_options, "~> 1.1"},
       {:jason, "~> 1.4"},
 
