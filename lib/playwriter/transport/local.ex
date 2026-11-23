@@ -13,11 +13,14 @@ defmodule Playwriter.Transport.Local do
 
   use GenServer
 
-  defstruct [:supervisor, :browser_types, :status]
+  alias Playwright.{Browser, BrowserContext, BrowserType, Frame, Page}
+
+  defstruct [:supervisor, :browser_types, :handles, :status]
 
   @type t :: %__MODULE__{
           supervisor: pid() | nil,
           browser_types: map(),
+          handles: %{String.t() => struct()},
           status: :starting | :ready | :error
         }
 
@@ -159,7 +162,8 @@ defmodule Playwriter.Transport.Local do
 
     case start_playwright(opts) do
       {:ok, supervisor} ->
-        {:ok, %__MODULE__{supervisor: supervisor, browser_types: %{}, status: :ready}}
+        {:ok,
+         %__MODULE__{supervisor: supervisor, browser_types: %{}, handles: %{}, status: :ready}}
 
       {:error, reason} ->
         {:stop, reason}
@@ -170,9 +174,9 @@ defmodule Playwriter.Transport.Local do
   def handle_call({:launch_browser, browser_type, opts}, _from, state) do
     browser_opts = build_browser_opts(opts)
 
-    case PlaywrightEx.launch_browser(browser_type, browser_opts) do
-      {:ok, %{guid: guid}} ->
-        {:reply, {:ok, guid}, state}
+    case BrowserType.launch(browser_type(browser_type), browser_opts) do
+      {:ok, browser} ->
+        {:reply, {:ok, browser.guid}, put_handle(state, browser)}
 
       {:error, _} = error ->
         {:reply, error, state}
@@ -181,57 +185,51 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call({:new_context, browser_guid, opts}, _from, state) do
-    context_opts = build_context_opts(opts)
-
-    case PlaywrightEx.Browser.new_context(browser_guid, context_opts) do
-      {:ok, %{guid: context_guid}} ->
-        {:reply, {:ok, context_guid}, state}
-
-      {:error, _} = error ->
-        {:reply, error, state}
+    with {:ok, browser} <- fetch_handle(state, browser_guid),
+         {:ok, context} <- Browser.new_context(browser, build_context_opts(opts)) do
+      {:reply, {:ok, context.guid}, put_handle(state, context)}
+    else
+      {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
   def handle_call({:new_page, context_guid}, _from, state) do
-    case PlaywrightEx.BrowserContext.new_page(context_guid, timeout: 30_000) do
-      {:ok, %{guid: page_guid, main_frame: frame}} ->
-        {:reply, {:ok, %{guid: page_guid, main_frame: frame}}, state}
-
-      {:error, _} = error ->
-        {:reply, error, state}
+    with {:ok, context} <- fetch_handle(state, context_guid),
+         {:ok, page} <- BrowserContext.new_page(context) do
+      frame = Page.main_frame(page)
+      state = state |> put_handle(page) |> put_handle(frame)
+      {:reply, {:ok, %{guid: page.guid, main_frame: %{guid: frame.guid}}}, state}
+    else
+      {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
   def handle_call({:goto, frame_guid, url, opts}, _from, state) do
-    # playwright_ex >= 0.5 validates :wait_until as a string
-    # ("load"/"domcontentloaded"/"networkidle"/"commit"), so normalise here to
-    # accept either an atom or a string from callers.
+    # Accept :wait_until as an atom or a string
+    # ("load"/"domcontentloaded"/"networkidle"/"commit") from callers.
     goto_opts =
       [
-        url: url,
         timeout: opts[:timeout] || 30_000,
-        wait_until: to_string(opts[:wait_until] || :load)
+        wait_until: wait_until(opts[:wait_until] || :load)
       ]
 
-    case PlaywrightEx.Frame.goto(frame_guid, goto_opts) do
-      {:ok, response} ->
-        {:reply, {:ok, response}, state}
-
-      {:error, _} = error ->
-        {:reply, error, state}
+    with {:ok, frame} <- fetch_handle(state, frame_guid),
+         {:ok, response} <- Frame.goto(frame, url, goto_opts) do
+      {:reply, {:ok, response}, state}
+    else
+      {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
   def handle_call({:content, frame_guid}, _from, state) do
-    case PlaywrightEx.Frame.content(frame_guid, timeout: 30_000) do
-      {:ok, html} when is_binary(html) ->
-        {:reply, {:ok, html}, state}
-
-      {:error, _} = error ->
-        {:reply, error, state}
+    with {:ok, frame} <- fetch_handle(state, frame_guid),
+         {:ok, html} when is_binary(html) <- Frame.content(frame) do
+      {:reply, {:ok, html}, state}
+    else
+      {:error, _} = error -> {:reply, error, state}
     end
   end
 
@@ -243,113 +241,131 @@ defmodule Playwriter.Transport.Local do
       omit_background: opts[:omit_background] || false
     ]
 
-    case PlaywrightEx.Page.screenshot(page_guid, screenshot_opts) do
-      {:ok, base64_data} when is_binary(base64_data) ->
-        # Playwright returns screenshot as base64-encoded data
-        {:reply, {:ok, Base.decode64!(base64_data)}, state}
-
-      {:error, _} = error ->
-        {:reply, error, state}
+    with {:ok, page} <- fetch_handle(state, page_guid),
+         {:ok, data} when is_binary(data) <- Page.screenshot(page, screenshot_opts) do
+      {:reply, {:ok, data}, state}
+    else
+      {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
   def handle_call({:click, frame_guid, selector, opts}, _from, state) do
-    click_opts = [selector: selector, timeout: opts[:timeout] || 30_000]
-
-    case PlaywrightEx.Frame.click(frame_guid, click_opts) do
-      {:ok, _} -> {:reply, :ok, state}
+    with {:ok, frame} <- fetch_handle(state, frame_guid),
+         :ok <- Frame.click(frame, selector, timeout: opts[:timeout] || 30_000) do
+      {:reply, :ok, state}
+    else
       {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
   def handle_call({:fill, frame_guid, selector, value, opts}, _from, state) do
-    fill_opts = [selector: selector, value: value, timeout: opts[:timeout] || 30_000]
-
-    case PlaywrightEx.Frame.fill(frame_guid, fill_opts) do
-      {:ok, _} -> {:reply, :ok, state}
+    with {:ok, frame} <- fetch_handle(state, frame_guid),
+         :ok <- Frame.fill(frame, selector, value, timeout: opts[:timeout] || 30_000) do
+      {:reply, :ok, state}
+    else
       {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
   def handle_call({:evaluate, frame_guid, expression, opts}, _from, state) do
-    eval_opts =
-      [expression: expression, timeout: opts[:timeout] || 30_000]
-      |> maybe_add(:is_function, opts[:is_function])
-      |> maybe_add(:arg, opts[:arg])
-
-    {:reply, PlaywrightEx.Frame.evaluate(frame_guid, eval_opts), state}
-  end
-
-  @impl GenServer
-  def handle_call({:wait_for_function, frame_guid, expression, opts}, _from, state) do
-    wait_opts =
-      [expression: expression, timeout: opts[:timeout] || 30_000]
-      |> maybe_add(:is_function, opts[:is_function])
-      |> maybe_add(:arg, opts[:arg])
-      |> maybe_add(:polling, opts[:polling])
-
-    case PlaywrightEx.Frame.wait_for_function(frame_guid, wait_opts) do
-      {:ok, result} -> {:reply, {:ok, result}, state}
+    # The driver calls the expression when it evaluates to a function, so
+    # :is_function needs no mapping.
+    with {:ok, frame} <- fetch_handle(state, frame_guid),
+         {:ok, result} <- Frame.evaluate(frame, expression, opts[:arg]) do
+      {:reply, {:ok, null_to_nil(result)}, state}
+    else
       {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
-  def handle_call({:add_init_script, context_guid, script, opts}, _from, state) do
-    init_opts = [source: script, timeout: opts[:timeout] || 30_000]
+  def handle_call({:wait_for_function, frame_guid, expression, opts}, _from, state) do
+    wait_opts =
+      [timeout: opts[:timeout] || 30_000]
+      |> maybe_add(:polling, polling(opts[:polling]))
 
-    case PlaywrightEx.BrowserContext.add_init_script(context_guid, init_opts) do
-      {:ok, _} -> {:reply, :ok, state}
+    with {:ok, frame} <- fetch_handle(state, frame_guid),
+         {:ok, result} <- Frame.wait_for_function(frame, expression, opts[:arg], wait_opts) do
+      {:reply, {:ok, result}, state}
+    else
+      {:error, _} = error -> {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call({:add_init_script, context_guid, script, _opts}, _from, state) do
+    with {:ok, context} <- fetch_handle(state, context_guid),
+         {:ok, _} <- BrowserContext.add_init_script(context, script) do
+      {:reply, :ok, state}
+    else
       {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
   def handle_call({:add_cookies, context_guid, cookies}, _from, state) do
-    case PlaywrightEx.BrowserContext.add_cookies(context_guid, cookies: cookies, timeout: 30_000) do
-      {:ok, _} -> {:reply, :ok, state}
+    with {:ok, context} <- fetch_handle(state, context_guid),
+         :ok <- BrowserContext.add_cookies(context, cookies) do
+      {:reply, :ok, state}
+    else
       {:error, _} = error -> {:reply, error, state}
     end
   end
 
   @impl GenServer
   def handle_call({:storage_state, context_guid}, _from, state) do
-    {:reply, PlaywrightEx.BrowserContext.storage_state(context_guid, timeout: 30_000), state}
+    with {:ok, context} <- fetch_handle(state, context_guid),
+         {:ok, storage_state} <- BrowserContext.storage_state(context) do
+      # Same string-keyed shape as the :windows transport returns.
+      {:reply, {:ok, storage_state |> Jason.encode!() |> Jason.decode!()}, state}
+    else
+      {:error, _} = error -> {:reply, error, state}
+    end
   end
 
   @impl GenServer
   def handle_call({:close_page, page_guid}, _from, state) do
-    # Pages don't have a close method in playwright_ex directly
-    # We send the close message (playwright_ex >= 0.5 takes opts, not a bare timeout)
-    PlaywrightEx.send(%{guid: page_guid, method: :close}, timeout: 5_000)
-    {:reply, :ok, state}
+    case Map.fetch(state.handles, page_guid) do
+      {:ok, page} ->
+        Page.close(page)
+        {:reply, :ok, drop_handles(state, [page_guid, Page.main_frame(page).guid])}
+
+      :error ->
+        {:reply, :ok, state}
+    end
   catch
     _, _ -> {:reply, :ok, state}
   end
 
   @impl GenServer
   def handle_call({:close_context, context_guid}, _from, state) do
-    PlaywrightEx.BrowserContext.close(context_guid, timeout: 5_000)
-    {:reply, :ok, state}
+    with {:ok, context} <- Map.fetch(state.handles, context_guid) do
+      BrowserContext.close(context)
+    end
+
+    {:reply, :ok, drop_handles(state, [context_guid])}
   catch
     _, _ -> {:reply, :ok, state}
   end
 
   @impl GenServer
   def handle_call({:close_browser, browser_guid}, _from, state) do
-    PlaywrightEx.Browser.close(browser_guid, timeout: 5_000)
-    {:reply, :ok, state}
+    with {:ok, browser} <- Map.fetch(state.handles, browser_guid) do
+      Browser.close(browser)
+    end
+
+    {:reply, :ok, drop_handles(state, [browser_guid])}
   catch
     _, _ -> {:reply, :ok, state}
   end
 
   @impl GenServer
-  def handle_call({:send_message, message, timeout}, _from, state) do
-    result = PlaywrightEx.send(message, timeout: timeout)
-    {:reply, result, state}
+  def handle_call({:send_message, _message, _timeout}, _from, state) do
+    # playwright_ex 1.x, like the Playwright JS client, exposes no raw protocol channel.
+    {:reply, {:error, :not_supported}, state}
   end
 
   @impl GenServer
@@ -374,12 +390,41 @@ defmodule Playwriter.Transport.Local do
   defp start_playwright(opts) do
     playwright_opts =
       opts
-      |> Keyword.take([:timeout, :executable])
-      |> Keyword.put_new(:timeout, 30_000)
+      |> Keyword.take([:executable])
       |> Keyword.put_new(:executable, default_executable())
 
-    PlaywrightEx.Supervisor.start_link(playwright_opts)
+    Playwright.Supervisor.start_link(playwright_opts)
   end
+
+  defp browser_type(:chromium), do: Playwright.chromium(Playwright.instance())
+  defp browser_type(:firefox), do: Playwright.firefox(Playwright.instance())
+  defp browser_type(:webkit), do: Playwright.webkit(Playwright.instance())
+
+  defp put_handle(state, handle), do: put_in(state.handles[handle.guid], handle)
+
+  defp drop_handles(state, guids), do: %{state | handles: Map.drop(state.handles, guids)}
+
+  defp fetch_handle(state, guid) do
+    case Map.fetch(state.handles, guid) do
+      {:ok, handle} -> {:ok, handle}
+      :error -> {:error, {:unknown_guid, guid}}
+    end
+  end
+
+  defp wait_until(value) when is_atom(value), do: value
+  defp wait_until(value) when is_binary(value), do: String.to_existing_atom(value)
+
+  defp polling("raf"), do: :raf
+  defp polling(value), do: value
+
+  # JS null comes back as :null; the transports return nil for it.
+  defp null_to_nil(:null), do: nil
+  defp null_to_nil(list) when is_list(list), do: Enum.map(list, &null_to_nil/1)
+
+  defp null_to_nil(map) when is_map(map) and not is_struct(map),
+    do: Map.new(map, fn {k, v} -> {k, null_to_nil(v)} end)
+
+  defp null_to_nil(value), do: value
 
   defp default_executable do
     # The :local transport shells out to a Node Playwright driver (cli.js).
@@ -412,9 +457,7 @@ defmodule Playwriter.Transport.Local do
   end
 
   defp build_context_opts(opts) do
-    base = [timeout: opts[:timeout] || 30_000]
-
-    base
+    []
     |> maybe_add(:viewport, opts[:viewport])
     |> maybe_add(:user_agent, opts[:user_agent])
     |> maybe_add(:locale, opts[:locale])

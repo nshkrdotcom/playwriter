@@ -111,13 +111,13 @@ Session.start_link()
      │
      ├──▶ Transport.Local.start_link()
      │         │
-     │         └──▶ PlaywrightEx.Supervisor.start_link()
+     │         └──▶ Playwright.Supervisor.start_link()
      │                    │
      │                    └──▶ Node.js Playwright Driver
      │
      ├──▶ launch_browser(:chromium)
      │         │
-     │         └──▶ PlaywrightEx.launch_browser()
+     │         └──▶ Playwright.BrowserType.launch()
      │
      └──▶ new_page()
               │

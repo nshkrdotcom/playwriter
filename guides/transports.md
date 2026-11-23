@@ -32,7 +32,7 @@ Your Application
 Local Transport (GenServer)
       │
       ▼
-PlaywrightEx Library
+playwright_ex (Playwright.*)
       │
       ▼
 Erlang Port
