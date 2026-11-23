@@ -13,6 +13,23 @@ defmodule Playwriter.Transport.LocalTest do
     end
   end
 
+  @tag :requires_browser
+  test "concurrent local transports keep independent browser lifetimes" do
+    {:ok, first} = Local.start_link([])
+    {:ok, second} = Local.start_link([])
+
+    assert {:ok, _} = Local.launch_browser(first, :chromium, headless: true)
+    assert {:ok, browser} = Local.launch_browser(second, :chromium, headless: true)
+    :ok = Local.stop(first)
+
+    assert {:ok, context} = Local.new_context(second, browser, [])
+    assert {:ok, %{guid: page, main_frame: %{guid: frame}}} = Local.new_page(second, context)
+    assert :ok = Local.close_context(second, context)
+    assert {:error, {:unknown_guid, ^page}} = Local.screenshot(second, page, [])
+    assert {:error, {:unknown_guid, ^frame}} = Local.content(second, frame)
+    :ok = Local.stop(second)
+  end
+
   describe "launch_browser/3" do
     @tag :requires_browser
     test "launches chromium headless" do

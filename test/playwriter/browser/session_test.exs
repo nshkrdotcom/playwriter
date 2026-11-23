@@ -12,9 +12,9 @@ defmodule Playwriter.Browser.SessionTest do
     end
 
     @tag :requires_windows_server
-    test "starts session with remote transport" do
+    test "starts session with Windows stdio transport" do
       assert {:ok, session} =
-               Session.start_link(mode: :remote, ws_endpoint: "ws://localhost:3337/")
+               Session.start_link(mode: :windows)
 
       assert Process.alive?(session)
       :ok = Session.close(session)

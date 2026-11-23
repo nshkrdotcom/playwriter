@@ -8,7 +8,7 @@ defmodule Playwriter.Server.DiscoveryTest do
       assert {:error, :not_found} = Discovery.discover(ports: [59_999], timeout: 100)
     end
 
-    @tag :requires_windows_server
+    @tag :requires_legacy_server
     test "finds running Windows server" do
       {:ok, endpoint} = Discovery.discover()
 
@@ -44,7 +44,7 @@ defmodule Playwriter.Server.DiscoveryTest do
       assert {:error, _} = Discovery.check_endpoint("ws://localhost:59999/", timeout: 100)
     end
 
-    @tag :requires_windows_server
+    @tag :requires_legacy_server
     test "returns ok for reachable endpoint" do
       assert :ok = Discovery.check_endpoint("ws://localhost:3337/")
     end

@@ -25,7 +25,9 @@ defmodule Playwriter.Transport.WindowsCmd do
   use GenServer
   require Logger
 
-  defstruct [:port, :request_id, :pending, :browser_ready, buffer: "", bindings: %{}]
+  alias Playwriter.Setup
+
+  defstruct [:port, :request_id, :pending, :browser_ready, :channel, buffer: "", bindings: %{}]
 
   @node_script """
   const { chromium } = require('playwright');
@@ -51,7 +53,7 @@ defmodule Playwriter.Transport.WindowsCmd do
 
       switch (cmd.method) {
         case 'launch':
-          browser = await chromium.launch({ headless: cmd.params?.headless ?? false });
+          browser = await chromium.launch({ headless: cmd.params?.headless ?? false, channel: cmd.params?.channel || undefined });
           result = { guid: 'browser-1' };
           break;
 
@@ -328,40 +330,46 @@ defmodule Playwriter.Transport.WindowsCmd do
 
   @impl GenServer
   def init(_opts) do
-    # Write the Node script to Windows temp
-    {script_dir, script_name} = write_script_to_windows()
+    with {:ok, channel} <- Setup.windows_channel(),
+         {:ok, dir, mount} <- Setup.windows_tools(),
+         :ok <- Setup.check_installed_channel(channel),
+         :ok <- Setup.check_windows_driver(dir, mount, channel) do
+      start_transport(dir, channel)
+    else
+      {:error, reason} -> {:stop, {:windows_setup_required, reason}}
+    end
+  end
 
-    # Build the Windows path for the script directory
-    windows_user = get_windows_user()
-    win_script_dir = "C:\\Users\\#{windows_user}\\AppData\\Local\\Temp\\playwriter-server"
+  defp start_transport(dir, channel) do
+    script = dir <> "\\transport.js"
 
-    # Use PowerShell instead of cmd.exe - handles paths better from WSL
-    # -NoProfile speeds up startup, -NonInteractive prevents prompts
-    ps_cmd = "Set-Location '#{win_script_dir}'; node #{script_name}"
-
-    Logger.debug("Starting PowerShell: #{ps_cmd}")
-    Logger.debug("Script written to: #{script_dir}/#{script_name}")
+    command = """
+    $ErrorActionPreference = 'Stop'
+    #{Setup.windows_path_refresh()}
+    Set-Location -LiteralPath #{Setup.ps_quote(dir)}
+    & node.exe #{Setup.ps_quote(script)}
+    exit $LASTEXITCODE
+    """
 
     port =
       Port.open(
-        {:spawn_executable, find_powershell_exe()},
-        [
-          :binary,
-          :exit_status,
-          :use_stdio,
-          {:args, ["-NoProfile", "-NonInteractive", "-Command", ps_cmd]}
-        ]
+        {:spawn_executable, Setup.windows_shell()},
+        [:binary, :exit_status, :use_stdio, {:args, Setup.windows_args(command)}]
       )
 
     state = %__MODULE__{
       port: port,
       request_id: 1,
       pending: %{},
-      browser_ready: false
+      browser_ready: false,
+      channel: channel
     }
 
     # Wait for ready signal
     receive do
+      {^port, {:exit_status, status}} ->
+        {:stop, {:windows_driver_exited, status}}
+
       {^port, {:data, data}} ->
         Logger.debug("Received from port: #{inspect(data)}")
 
@@ -387,6 +395,9 @@ defmodule Playwriter.Transport.WindowsCmd do
 
   defp wait_for_ready(port, state, accumulated) do
     receive do
+      {^port, {:exit_status, status}} ->
+        {:stop, {:windows_driver_exited, status}}
+
       {^port, {:data, data}} ->
         full_data = accumulated <> data
         # Try to find the ready message in accumulated data
@@ -412,7 +423,12 @@ defmodule Playwriter.Transport.WindowsCmd do
 
   @impl GenServer
   def handle_call({:launch, opts}, from, state) do
-    send_command(state, "launch", %{headless: opts[:headless] || false}, from)
+    send_command(
+      state,
+      "launch",
+      %{headless: opts[:headless] || false, channel: state.channel},
+      from
+    )
   end
 
   @impl GenServer
@@ -686,33 +702,6 @@ defmodule Playwriter.Transport.WindowsCmd do
   def process_result(%{"ok" => true}), do: :ok
   def process_result(result), do: {:ok, result}
 
-  defp write_script_to_windows do
-    # Write to Windows temp via /mnt/c path
-    windows_user = get_windows_user()
-    script_dir = "/mnt/c/Users/#{windows_user}/AppData/Local/Temp/playwriter-server"
-
-    Logger.debug("Creating script directory: #{script_dir}")
-    File.mkdir_p!(script_dir)
-
-    # Write package.json if missing
-    package_json_path = Path.join(script_dir, "package.json")
-
-    unless File.exists?(package_json_path) do
-      package_json =
-        ~s|{"name":"playwriter-server","private":true,"dependencies":{"playwright":"^1.49.0"}}|
-
-      File.write!(package_json_path, package_json)
-      Logger.info("Created package.json, you may need to run: cd #{script_dir} && npm install")
-    end
-
-    script_path = Path.join(script_dir, "transport.js")
-    File.write!(script_path, @node_script)
-
-    Logger.debug("Wrote transport script to: #{script_path}")
-
-    {script_dir, "transport.js"}
-  end
-
   @doc false
   # Resolve the Windows account whose %TEMP% hosts the transport script.
   # Order:
@@ -732,7 +721,7 @@ defmodule Playwriter.Transport.WindowsCmd do
 
   defp powershell_username do
     case System.cmd(
-           find_powershell_exe(),
+           Setup.windows_shell(),
            ["-NoProfile", "-NonInteractive", "-Command", "$env:USERNAME"],
            stderr_to_stdout: true
          ) do
@@ -759,17 +748,6 @@ defmodule Playwriter.Transport.WindowsCmd do
 
       _ ->
         "Default"
-    end
-  end
-
-  defp find_powershell_exe do
-    # Try PowerShell 7+ first, fall back to Windows PowerShell
-    pwsh = "/mnt/c/Program Files/PowerShell/7/pwsh.exe"
-
-    if File.exists?(pwsh) do
-      pwsh
-    else
-      "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
     end
   end
 

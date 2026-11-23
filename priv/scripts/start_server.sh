@@ -1,4 +1,5 @@
 #!/bin/bash
+# Legacy WebSocket launcher. For WSL stdio, use mix playwriter.setup --mode windows.
 # Start Windows Playwright server from WSL
 # This runs PowerShell on Windows to start the server
 

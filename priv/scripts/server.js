@@ -1,3 +1,4 @@
+// Legacy WebSocket launcher. For WSL stdio, use mix playwriter.setup --mode windows.
 // Playwriter Windows Server
 // Run with: node server.js [port]
 

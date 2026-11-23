@@ -9,7 +9,7 @@ defmodule Playwriter.CapabilitiesIntegrationTest do
         INTEGRATION=true mix test test/playwriter/capabilities_integration_test.exs
     (needs `mix playwriter.setup` first for the Node driver + Chromium).
   - `:requires_windows_server` - the `:windows` visible-desktop path. Run on a
-    WSL+Windows box with `mix playwriter.setup` on the Windows side:
+    WSL+Windows box after `mix playwriter.setup --mode windows` from WSL:
         WINDOWS_SERVER=true mix test test/playwriter/capabilities_integration_test.exs
   """
   use ExUnit.Case, async: false
@@ -91,8 +91,6 @@ defmodule Playwriter.CapabilitiesIntegrationTest do
     end
   end
 
-  # Separate block: no shared session (playwright_ex's connection is a global
-  # singleton, so only one :local session may exist at a time).
   describe "local facade wrappers" do
     @describetag :requires_browser
 

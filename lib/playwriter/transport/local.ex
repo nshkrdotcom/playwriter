@@ -15,13 +15,12 @@ defmodule Playwriter.Transport.Local do
 
   alias Playwright.{Browser, BrowserContext, BrowserType, Frame, Page}
 
-  defstruct [:supervisor, :browser_types, :handles, :status]
+  defstruct [:supervisor, :handles, :parents]
 
   @type t :: %__MODULE__{
           supervisor: pid() | nil,
-          browser_types: map(),
           handles: %{String.t() => struct()},
-          status: :starting | :ready | :error
+          parents: %{String.t() => String.t()}
         }
 
   # Client API
@@ -162,8 +161,8 @@ defmodule Playwriter.Transport.Local do
 
     case start_playwright(opts) do
       {:ok, supervisor} ->
-        {:ok,
-         %__MODULE__{supervisor: supervisor, browser_types: %{}, handles: %{}, status: :ready}}
+        Process.monitor(supervisor)
+        {:ok, %__MODULE__{supervisor: supervisor, handles: %{}, parents: %{}}}
 
       {:error, reason} ->
         {:stop, reason}
@@ -187,7 +186,7 @@ defmodule Playwriter.Transport.Local do
   def handle_call({:new_context, browser_guid, opts}, _from, state) do
     with {:ok, browser} <- fetch_handle(state, browser_guid),
          {:ok, context} <- Browser.new_context(browser, build_context_opts(opts)) do
-      {:reply, {:ok, context.guid}, put_handle(state, context)}
+      {:reply, {:ok, context.guid}, put_handle(state, context, browser_guid)}
     else
       {:error, _} = error -> {:reply, error, state}
     end
@@ -198,7 +197,7 @@ defmodule Playwriter.Transport.Local do
     with {:ok, context} <- fetch_handle(state, context_guid),
          {:ok, page} <- BrowserContext.new_page(context) do
       frame = Page.main_frame(page)
-      state = state |> put_handle(page) |> put_handle(frame)
+      state = state |> put_handle(page, context_guid) |> put_handle(frame, page.guid)
       {:reply, {:ok, %{guid: page.guid, main_frame: %{guid: frame.guid}}}, state}
     else
       {:error, _} = error -> {:reply, error, state}
@@ -288,8 +287,16 @@ defmodule Playwriter.Transport.Local do
       |> maybe_add(:polling, polling(opts[:polling]))
 
     with {:ok, frame} <- fetch_handle(state, frame_guid),
-         {:ok, result} <- Frame.wait_for_function(frame, expression, opts[:arg], wait_opts) do
-      {:reply, {:ok, result}, state}
+         {:ok, handle} <- Frame.wait_for_function(frame, expression, opts[:arg], wait_opts) do
+      result =
+        try do
+          with {:ok, value} <- Playwright.JSHandle.json_value(handle),
+               do: {:ok, null_to_nil(value)}
+        after
+          Playwright.JSHandle.dispose(handle)
+        end
+
+      {:reply, result, state}
     else
       {:error, _} = error -> {:reply, error, state}
     end
@@ -328,38 +335,17 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call({:close_page, page_guid}, _from, state) do
-    case Map.fetch(state.handles, page_guid) do
-      {:ok, page} ->
-        Page.close(page)
-        {:reply, :ok, drop_handles(state, [page_guid, Page.main_frame(page).guid])}
-
-      :error ->
-        {:reply, :ok, state}
-    end
-  catch
-    _, _ -> {:reply, :ok, state}
+    {:reply, :ok, close_handle(state, page_guid, &Page.close/1)}
   end
 
   @impl GenServer
   def handle_call({:close_context, context_guid}, _from, state) do
-    with {:ok, context} <- Map.fetch(state.handles, context_guid) do
-      BrowserContext.close(context)
-    end
-
-    {:reply, :ok, drop_handles(state, [context_guid])}
-  catch
-    _, _ -> {:reply, :ok, state}
+    {:reply, :ok, close_handle(state, context_guid, &BrowserContext.close/1)}
   end
 
   @impl GenServer
   def handle_call({:close_browser, browser_guid}, _from, state) do
-    with {:ok, browser} <- Map.fetch(state.handles, browser_guid) do
-      Browser.close(browser)
-    end
-
-    {:reply, :ok, drop_handles(state, [browser_guid])}
-  catch
-    _, _ -> {:reply, :ok, state}
+    {:reply, :ok, close_handle(state, browser_guid, &Browser.close/1)}
   end
 
   @impl GenServer
@@ -370,19 +356,21 @@ defmodule Playwriter.Transport.Local do
 
   @impl GenServer
   def handle_call(:healthy?, _from, state) do
-    healthy = state.status == :ready and Process.alive?(state.supervisor)
-    {:reply, healthy, state}
+    {:reply, Process.alive?(state.supervisor), state}
+  end
+
+  @impl GenServer
+  def handle_info({:DOWN, _, :process, driver, reason}, %{supervisor: driver} = state) do
+    {:stop, {:local_driver_exited, reason}, state}
   end
 
   @impl GenServer
   def terminate(_reason, state) do
-    if state.supervisor && Process.alive?(state.supervisor) do
-      Supervisor.stop(state.supervisor, :normal, 5_000)
+    for %Browser{} = browser <- Map.values(state.handles), Process.alive?(state.supervisor) do
+      safely_close(&Browser.close/1, browser)
     end
 
     :ok
-  catch
-    :exit, _ -> :ok
   end
 
   # Private functions
@@ -393,16 +381,56 @@ defmodule Playwriter.Transport.Local do
       |> Keyword.take([:executable])
       |> Keyword.put_new(:executable, default_executable())
 
-    Playwright.Supervisor.start_link(playwright_opts)
+    if File.regular?(playwright_opts[:executable]) and System.find_executable("node") do
+      Playwriter.LocalDriver.acquire(Path.expand(playwright_opts[:executable]))
+    else
+      {:error, {:local_setup_required, "Run mix playwriter.setup in a shell with Node.js"}}
+    end
   end
 
-  defp browser_type(:chromium), do: Playwright.chromium(Playwright.instance())
-  defp browser_type(:firefox), do: Playwright.firefox(Playwright.instance())
-  defp browser_type(:webkit), do: Playwright.webkit(Playwright.instance())
+  defp browser_type(:chromium), do: Playwright.chromium(Playwriter.LocalDriver.instance())
+  defp browser_type(:firefox), do: Playwright.firefox(Playwriter.LocalDriver.instance())
+  defp browser_type(:webkit), do: Playwright.webkit(Playwriter.LocalDriver.instance())
 
   defp put_handle(state, handle), do: put_in(state.handles[handle.guid], handle)
 
-  defp drop_handles(state, guids), do: %{state | handles: Map.drop(state.handles, guids)}
+  defp put_handle(state, handle, parent) do
+    state = put_handle(state, handle)
+    put_in(state.parents[handle.guid], parent)
+  end
+
+  defp close_handle(state, guid, close) do
+    case Map.fetch(state.handles, guid) do
+      {:ok, handle} ->
+        safely_close(close, handle)
+        guids = descendants(state.parents, guid)
+
+        %{
+          state
+          | handles: Map.drop(state.handles, guids),
+            parents: Map.drop(state.parents, guids)
+        }
+
+      :error ->
+        state
+    end
+  end
+
+  defp safely_close(close, handle) do
+    close.(handle)
+  catch
+    _, _ -> :ok
+  end
+
+  defp descendants(parents, guid) do
+    [
+      guid
+      | Enum.flat_map(parents, fn
+          {child, ^guid} -> descendants(parents, child)
+          _ -> []
+        end)
+    ]
+  end
 
   defp fetch_handle(state, guid) do
     case Map.fetch(state.handles, guid) do
@@ -427,14 +455,7 @@ defmodule Playwriter.Transport.Local do
   defp null_to_nil(value), do: value
 
   defp default_executable do
-    # The :local transport shells out to a Node Playwright driver (cli.js).
-    # Resolution order (first match wins), so the driver is provisioned
-    # reproducibly rather than pinned to a hex artifact:
-    #   1. PLAYWRIGHT_CLI env var (explicit override, e.g. CI)
-    #   2. config :playwriter, :playwright_cli
-    #   3. node_modules/playwright/cli.js under the current project
-    #      (installed by `mix playwriter.setup`, pinned in package.json)
-    #   4. the legacy hex `playwright` package location, if still present
+    # Explicit overrides win, followed by the managed CLI and legacy locations.
     System.get_env("PLAYWRIGHT_CLI") ||
       Application.get_env(:playwriter, :playwright_cli) ||
       resolve_bundled_cli()
@@ -442,6 +463,7 @@ defmodule Playwriter.Transport.Local do
 
   defp resolve_bundled_cli do
     candidates = [
+      Playwriter.Setup.local_cli(),
       Path.join([File.cwd!(), "node_modules", "playwright", "cli.js"]),
       Path.join(["deps", "playwright", "priv", "static", "node_modules", "playwright", "cli.js"])
     ]

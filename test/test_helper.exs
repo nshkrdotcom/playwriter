@@ -8,19 +8,14 @@ ExUnit.configure(
     :integration,
     :requires_browser,
     :requires_windows_server,
+    :requires_legacy_server,
     :wsl_only,
     :chaos
   ]
 )
 
-# Include integration tests when INTEGRATION=true
-if System.get_env("INTEGRATION") do
-  ExUnit.configure(include: [:integration, :requires_browser])
-end
-
-# Include Windows server tests when WINDOWS_SERVER=true
-if System.get_env("WINDOWS_SERVER") do
-  ExUnit.configure(include: [:requires_windows_server])
-end
+local = if System.get_env("INTEGRATION"), do: [:integration, :requires_browser], else: []
+windows = if System.get_env("WINDOWS_SERVER"), do: [:requires_windows_server], else: []
+ExUnit.configure(include: local ++ windows)
 
 ExUnit.start()

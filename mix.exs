@@ -1,14 +1,14 @@
 defmodule Playwriter.MixProject do
   use Mix.Project
 
-  @version "0.3.0"
+  @version "0.4.0"
   @source_url "https://github.com/nshkrdotcom/playwriter"
 
   def project do
     [
       app: :playwriter,
       version: @version,
-      elixir: "~> 1.15",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -33,6 +33,7 @@ defmodule Playwriter.MixProject do
 
   def application do
     [
+      mod: {Playwriter.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -54,18 +55,14 @@ defmodule Playwriter.MixProject do
 
   defp deps do
     [
-      # Core - playwright_ex drives the local (headless) transport. The Node
-      # Playwright driver the :local transport shells out to is provided at the
-      # environment level (npm `playwright`, or the `playwright` hex package's
-      # bundled cli.js) rather than pinned here - matching playwright_ex's own
-      # "executable:" convention and avoiding the gun/cowlib toolchain coupling.
-      {:playwright, "~> 1.65.0-rc.4", hex: :playwright_ex},
-      {:nimble_options, "~> 1.1"},
+      # Keep the local npm driver in priv/driver aligned with this release.
+      {:playwright, "== 1.65.0-rc.4", hex: :playwright_ex},
+      {:nimble_options, "~> 1.2"},
       {:jason, "~> 1.4"},
 
       # Testing
-      {:supertester, "~> 0.5", only: :test},
-      {:mox, "~> 1.2", only: :test},
+      {:supertester, "~> 0.6", only: :test},
+      {:mox, "~> 1.3", only: :test},
 
       # Development
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
@@ -93,7 +90,7 @@ defmodule Playwriter.MixProject do
     [
       name: "playwriter",
       files:
-        ~w(lib assets priv/scripts .formatter.exs mix.exs README.md LICENSE CHANGELOG.md AGENTS.md examples guides),
+        ~w(lib assets priv/scripts priv/driver .formatter.exs mix.exs README.md LICENSE CHANGELOG.md AGENTS.md examples guides),
       maintainers: ["NSHkr"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
