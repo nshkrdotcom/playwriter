@@ -3,13 +3,12 @@
 # Usage:
 #   mix run examples/fetch_html.exs           # auto-detect mode
 #   mix run examples/fetch_html.exs --local   # force local mode
-#   mix run examples/fetch_html.exs --remote  # force remote mode (WSL to Windows)
+#   mix run examples/fetch_html.exs --windows  # use Windows stdio from WSL
 #
 # Options:
 #   --local, -l      Use local Playwright (requires: mix playwriter.setup)
-#   --remote, -r     Use remote Windows server (requires: powershell.exe -File priv/scripts/start_server.ps1)
-#   --endpoint, -e   Specify WebSocket endpoint for remote mode
-#   --headless, -h   Run headless (default: true for local, false for remote)
+#   --windows, -w    Use Windows stdio (requires: mix playwriter.setup --mode windows)
+#   --headless, -h   Run headless (default: true for local, false for Windows)
 
 Code.require_file("support.exs", __DIR__)
 alias Playwriter.Examples.Support

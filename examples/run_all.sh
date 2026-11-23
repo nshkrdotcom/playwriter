@@ -5,7 +5,7 @@
 # Usage:
 #   ./examples/run_all.sh           # Auto-detect mode
 #   ./examples/run_all.sh --local   # Force local mode
-#   ./examples/run_all.sh --remote  # Force remote mode
+#   ./examples/run_all.sh --windows # Force Windows mode
 #   ./examples/run_all.sh --windows # Force windows mode
 
 set -e
@@ -32,7 +32,7 @@ EXAMPLES=(
     "interaction.exs"
 )
 
-# Windows-specific examples (only run with --windows or --remote)
+# Windows-specific examples (only run with --windows)
 WINDOWS_EXAMPLES=(
     "windows_browser.exs"
     "windows_mode.exs"
@@ -60,7 +60,7 @@ for example in "${EXAMPLES[@]}"; do
 done
 
 # Run Windows examples only if requested
-if [[ "$ARGS" == *"--windows"* ]] || [[ "$ARGS" == *"--remote"* ]]; then
+if [[ "$ARGS" == *"--windows"* ]]; then
     echo "========================================"
     echo "Running Windows-specific examples"
     echo "========================================"

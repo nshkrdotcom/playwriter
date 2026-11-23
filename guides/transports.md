@@ -108,14 +108,14 @@ end)
 One-time installation:
 
 ```bash
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
+mix playwriter.setup --mode windows
 ```
 
 ### Advantages
 
 - **Visible browsers** - See automation happening in real-time
 - **No network issues** - Bypasses WSL2 Hyper-V firewall completely
-- **No server required** - Just works after npm install
+- **No server required** - Run the one-time stdio setup
 - **Best for WSL development** - The recommended mode for WSL users
 
 ### Limitations
@@ -130,7 +130,7 @@ The remote transport (`Playwriter.Transport.Remote`) is designed for connecting 
 
 ### Current Status
 
-**Note:** The remote transport is currently non-functional from WSL2 due to Hyper-V firewall blocking WebSocket connections to Windows. Use `:windows` mode instead for WSL-to-Windows automation.
+**Status:** The remote transport is unsupported. Use `:windows` for WSL-to-Windows automation.
 
 The remote transport returns a helpful error message directing users to `:windows` mode:
 
@@ -208,25 +208,19 @@ mix playwriter.setup
 **"Browser launch failed"**
 ```bash
 # Ensure dependencies are installed
-cd deps/playwright/priv/static && npx playwright install-deps chromium
+mix playwriter.setup --with-deps
 ```
 
 ### Windows Transport Issues
 
 **"Timeout waiting for transport to start"**
 - Ensure Node.js is installed on Windows
-- Run the setup script: `powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install`
+- Run the setup script: `mix playwriter.setup --mode windows`
 
-**"Cannot find module 'playwright'"**
-```powershell
-# On Windows, in PowerShell
-cd $env:TEMP\playwriter-server
-npm install playwright
-npx playwright install chromium
-```
+For missing or stale driver assets, see [WSL–Windows Setup](wsl-windows.md).
 
 ### Remote Transport Issues
 
 **"not_supported" error**
 - Use `mode: :windows` instead when working from WSL
-- The remote transport doesn't work from WSL2 due to networking restrictions
+- The legacy remote transport is unsupported

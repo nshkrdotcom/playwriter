@@ -199,7 +199,7 @@ end
 
 ```elixir
 # See the browser on your Windows desktop while developing
-{:ok, result} = Playwriter.with_browser([mode: :remote, headless: false], fn ctx ->
+{:ok, result} = Playwriter.with_browser([mode: :windows, headless: false], fn ctx ->
   :ok = Playwriter.goto(ctx, "https://example.com")
 
   # Pause to inspect
@@ -216,7 +216,7 @@ end)
 ```elixir
 defmodule DebugScraper do
   def run(url) do
-    Playwriter.with_browser([mode: :remote, headless: false], fn ctx ->
+    Playwriter.with_browser([mode: :windows, headless: false], fn ctx ->
       :ok = Playwriter.goto(ctx, url)
 
       debug_loop(ctx)

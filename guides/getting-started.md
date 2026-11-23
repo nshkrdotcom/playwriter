@@ -1,122 +1,37 @@
 # Getting Started
 
-This guide will help you get up and running with Playwriter in just a few minutes.
+Playwriter 0.4 requires Elixir 1.18 or newer and Node.js 20 or newer for the driver. Use a supported Node LTS. Install Node through the package manager or workstation bootstrap that owns the target host.
 
-## Installation
+| Mode | Elixir runs in | Node and Chromium run in | Setup command |
+| --- | --- | --- | --- |
+| `:local` (default) | Your current shell | The same environment, headless by default | `mix playwriter.setup` |
+| `:windows` | WSL | Windows, visible by default | `mix playwriter.setup --mode windows` |
 
-Add `playwriter` to your list of dependencies in `mix.exs`:
+Add Playwriter to the dependencies in your application's `mix.exs`:
 
 ```elixir
-def deps do
-  [
-    {:playwriter, "~> 0.1.0"}
-  ]
-end
+{:playwriter, "~> 0.4.0"}
 ```
 
-Then fetch dependencies:
+Run `mix deps.get` from the application before setting up a driver.
+
+## Local headless browser
+
+Verify `node --version` and `npm --version` in the shell that runs Mix. If your runtime manager initializes only in your login shell, use that shell or configure CI to load the manager explicitly.
 
 ```bash
-mix deps.get
-```
-
-## Choose Your Mode
-
-Playwriter supports three modes of operation:
-
-| Mode | Use Case | Setup Required |
-|------|----------|----------------|
-| **Local** | CI/CD, headless scraping, native Linux | `mix playwriter.setup` |
-| **Windows** | WSL-to-Windows, visible browsers, debugging | One-time npm install |
-| **Remote** | Distributed automation (non-WSL only) | Playwright server |
-
-## Quick Start: Local Mode
-
-For headless browser automation on your local machine:
-
-```bash
-# One-time setup: install Playwright
 mix playwriter.setup
+mix playwriter.setup --check
+mix run -e 'IO.inspect(Playwriter.fetch_html("data:text/html,<h1>Playwriter</h1>"))'
 ```
 
-Then in your code:
+Setup installs the locked npm driver into `.playwriter-driver/` and downloads its matching Chromium into Playwright's browser cache. You can select Firefox, WebKit or all browsers with `--browser`. On Linux, `--with-deps` explicitly requests system libraries and may require elevated privileges. `PLAYWRIGHT_BROWSERS_PATH` can select a dedicated cache. Use the same value for setup, checks and runs.
 
-```elixir
-{:ok, html} = Playwriter.fetch_html("https://example.com")
-```
+The local transport honors `PLAYWRIGHT_CLI` and then `config :playwriter, :playwright_cli` when you supply a driver yourself. Use the npm driver version tested with this release.
 
-## Quick Start: Windows Mode (WSL to Windows)
+## Visible Windows browser from WSL
 
-**Recommended for WSL users.** See visible browsers on your Windows desktop:
-
-**1. One-time setup (installs Playwright on Windows):**
-
-```bash
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
-```
-
-**2. Use from Elixir:**
-
-```elixir
-{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
-```
-
-A browser window will open on Windows!
-
-## Running Examples
-
-```bash
-# Local mode (headless)
-mix run examples/fetch_html.exs --local
-
-# Windows mode (visible browser on Windows)
-mix run examples/windows_mode.exs
-```
-
-Available examples:
-- `examples/fetch_html.exs` - Fetch HTML content
-- `examples/screenshot.exs` - Take screenshots
-- `examples/interaction.exs` - Form filling and clicking
-- `examples/windows_mode.exs` - WSL-to-Windows demo
-
-## Setup Commands
-
-### Local Mode Setup
-
-```bash
-# Install Playwright and Chromium
-mix playwriter.setup
-
-# Install a different browser
-mix playwriter.setup --browser firefox
-
-# Install all browsers
-mix playwriter.setup --browser all
-```
-
-### Windows Mode Setup
-
-On Windows, you need Node.js and Playwright installed in `%TEMP%\playwriter-server`:
-
-```bash
-# From WSL - runs setup on Windows
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
-```
-
-Or manually on Windows:
-
-```powershell
-# Install Node.js (if not already installed)
-winget install OpenJS.NodeJS.LTS
-
-# Create and setup server directory
-cd $env:TEMP
-mkdir playwriter-server
-cd playwriter-server
-npm init -y
-npm install playwright
-npx playwright install chromium
-```
+Install Node and npm on the **Windows** host first. Then use the commands in [WSL–Windows Setup](wsl-windows.md) to verify interop and prepare Windows Chromium. Run Playwriter from WSL with `mode: :windows`.
 
 ## Your First Script
 
@@ -170,46 +85,11 @@ All functions accept options to customize behavior:
 
 ```elixir
 Playwriter.fetch_html("https://example.com",
-  mode: :windows,         # :local, :windows, or :remote
+  mode: :windows,         # :local or :windows
   headless: false,        # show browser window (local mode only)
   browser_type: :chromium,# :chromium, :firefox, :webkit (local mode)
   timeout: 60_000         # milliseconds
 )
 ```
 
-## Troubleshooting
-
-### "Playwright executable not found"
-
-Run the setup task:
-
-```bash
-mix playwriter.setup
-```
-
-### "Timeout waiting for transport" (Windows mode)
-
-Ensure Playwright is installed on Windows:
-
-```bash
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
-```
-
-### "Cannot find module 'playwright'" (Windows mode)
-
-Manually install on Windows:
-
-```powershell
-cd $env:TEMP\playwriter-server
-npm install playwright
-npx playwright install chromium
-```
-
-## Next Steps
-
-- [Architecture Overview](architecture.md) - Understand how Playwriter works
-- [Function Reference](functions.md) - Complete function documentation
-- [Transport Layer](transports.md) - Learn about local, windows, and remote transports
-- [WSL-Windows Integration](wsl-windows.md) - Detailed Windows mode setup
-- [Examples](examples.md) - Real-world usage examples
-- [Troubleshooting](troubleshooting.md) - Common issues and fixes
+See [Function Reference](functions.md), [Usage Examples](examples.md) and [Troubleshooting](troubleshooting.md).

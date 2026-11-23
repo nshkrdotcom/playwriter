@@ -25,7 +25,7 @@ Playwriter is built on a clean, modular architecture that separates concerns and
 │  ┌─────────────────────────────▼───────────────────────────┐   │
 │  │                   Transport Layer                       │   │
 │  │  ┌──────────────────┐    ┌────────────────────────────┐ │   │
-│  │  │  Local Transport │    │   Remote Transport         │ │   │
+│  │  │  Local Transport │    │  Windows Transport         │ │   │
 │  │  │  (playwright_ex) │    │   (WebSocket to Windows)   │ │   │
 │  │  └──────────────────┘    └────────────────────────────┘ │   │
 │  └─────────────────────────────────────────────────────────┘   │
@@ -56,7 +56,7 @@ A GenServer that manages the complete browser lifecycle:
 # Session state structure
 %Playwriter.Browser.Session{
   transport: pid(),           # Transport process
-  transport_module: module(), # Local or Remote
+  transport_module: module(), # Local or Windows
   browser_guid: String.t(),   # Playwright browser ID
   contexts: %{},              # Active browser contexts
   pages: %{}                  # Active pages
@@ -73,13 +73,13 @@ The transport layer abstracts communication with Playwright:
 - Uses Erlang Ports to communicate with Node.js
 - Best for headless automation and local development
 
-#### Remote Transport (`Playwriter.Transport.Remote`)
+#### Windows Transport (`Playwriter.Transport.WindowsCmd`)
 
-- Connects via WebSocket to a Playwright server
-- Enables WSL-to-Windows browser visibility
-- Supports distributed browser automation
+- Launches the Windows Node worker through WSL interop and PowerShell
+- Uses newline-delimited JSON over stdio to control a visible Windows Chromium browser
+- Accepts a managed browser or a configured Edge or Chrome channel
 
-Both transports implement `Playwriter.Transport.Behaviour`:
+The local and Windows transports implement `Playwriter.Transport.Behaviour`. The legacy `:remote` transport is an unsupported stub.
 
 ```elixir
 @callback start_link(keyword()) :: {:ok, pid()} | {:error, term()}
@@ -124,25 +124,14 @@ Session.start_link()
               └──▶ Browser visible (if headless: false)
 ```
 
-### Remote Mode (WSL to Windows)
+### Windows Mode (WSL to Windows)
 
-```
-with_browser([mode: :remote])
-     │
-     ▼
-Session.start_link()
-     │
-     ├──▶ Discovery.discover()
-     │         │
-     │         └──▶ Find ws://localhost:3337/
-     │
-     ├──▶ Transport.Remote.start_link()
-     │         │
-     │         └──▶ WebSocket connect to Windows
-     │
-     └──▶ new_page()
-              │
-              └──▶ Browser visible on Windows desktop!
+```text
+Playwriter.with_browser([mode: :windows])
+  → Session.start_link()
+  → WindowsCmd checks the Windows driver and opens PowerShell
+  → Windows Node worker receives JSON commands on stdin
+  → Playwright opens Chromium on the Windows desktop
 ```
 
 ## Error Handling
@@ -152,7 +141,7 @@ Playwriter uses OTP patterns for robust error handling:
 1. **Session supervision** - Sessions are independent GenServers
 2. **Transport isolation** - Transport failures don't crash sessions
 3. **Resource cleanup** - `terminate/2` ensures browsers are closed
-4. **Graceful degradation** - Remote failures fall back cleanly
+4. **Setup diagnostics** - Windows startup reports missing driver prerequisites
 
 ## Extension Points
 
@@ -186,5 +175,5 @@ The Session GenServer can be extended:
 
 1. **Reuse sessions** - Creating browsers is expensive
 2. **Use headless mode** - Faster than headed browsers
-3. **Local transport** - Lower latency than remote
+3. **Local transport** - Uses a same-host Node driver
 4. **Connection pooling** - Consider for high-throughput scenarios

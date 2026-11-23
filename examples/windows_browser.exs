@@ -8,7 +8,7 @@
 #
 # Prerequisites:
 #   Install Playwright on Windows first:
-#     powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
+#     mix playwriter.setup --mode windows
 #
 # For local-only automation, use the other examples with --local flag.
 
@@ -89,9 +89,7 @@ case Support.detect_mode(:windows, opts) do
         IO.puts("Run the setup script first:")
         IO.puts("")
 
-        IO.puts(
-          "    powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install"
-        )
+        IO.puts("    mix playwriter.setup --mode windows")
 
         IO.puts("")
         IO.puts("Then run this example again.")

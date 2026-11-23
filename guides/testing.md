@@ -59,23 +59,16 @@ These tests verify:
 - Screenshots and interactions
 - Session lifecycle management
 
-### Windows Server Tests
+### Windows stdio tests
 
-These tests connect to a Windows Playwright server:
+From WSL, run the capability and session tests against the Windows desktop:
 
 ```bash
-# 1. Start the server on Windows
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1
-
-# 2. Run tests from WSL
-WINDOWS_SERVER=true mix test
+mix playwriter.setup --mode windows
+WINDOWS_SERVER=true mix test test/playwriter/capabilities_integration_test.exs test/playwriter/browser/session_test.exs
 ```
 
-These tests verify:
-- Remote transport WebSocket connection
-- WSL-to-Windows communication
-- Server discovery
-- Cross-platform browser control
+The historical `WINDOWS_SERVER` switch enables Windows stdio tests. Legacy discovery tests require the separate `--include requires_legacy_server` flag and a running legacy server.
 
 ### All Tests
 
@@ -85,8 +78,8 @@ To run the complete test suite:
 # 1. Install local Playwright
 mix playwriter.setup
 
-# 2. Start Windows server (if testing remote mode)
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1
+# 2. Provision the Windows stdio driver
+mix playwriter.setup --mode windows
 
 # 3. Run all tests
 INTEGRATION=true WINDOWS_SERVER=true mix test
@@ -105,33 +98,12 @@ mix playwriter.setup --browser firefox
 mix playwriter.setup --browser all
 
 # If you see browser launch errors on Linux
-cd deps/playwright_ex && npx playwright install-deps chromium
+mix playwriter.setup --with-deps
 ```
 
-### Windows Server Setup
+### Windows stdio setup
 
-On Windows, you need Node.js and Playwright:
-
-```powershell
-# Install Node.js if needed
-winget install OpenJS.NodeJS.LTS
-
-# Create server directory (one-time)
-mkdir C:\playwright-server
-cd C:\playwright-server
-npm init -y
-npm install playwright
-npx playwright install chromium
-
-# Start server (each session)
-npx playwright run-server --port 3337
-```
-
-Or use the provided script:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1
-```
+Follow [WSL–Windows Setup](wsl-windows.md), then run `mix playwriter.setup --mode windows --check` from WSL. The legacy discovery tests are distinct from the visible desktop transport tests.
 
 ## Writing Tests
 
@@ -169,17 +141,17 @@ defmodule BrowserTest do
 end
 ```
 
-### Windows Server Tests
+### Tagging Windows stdio tests
 
-Tag tests that need the Windows server:
+Tag tests that need a Windows browser from WSL:
 
 ```elixir
-defmodule RemoteTest do
+defmodule WindowsBrowserTest do
   use ExUnit.Case
 
   @tag :requires_windows_server
   test "connects to Windows browser" do
-    {:ok, html} = Playwriter.fetch_html("https://example.com", mode: :remote)
+    {:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
     assert html =~ "Example Domain"
   end
 end
@@ -244,12 +216,12 @@ test/
 mix playwriter.setup
 ```
 
-### "No Playwright server found"
+### Windows setup required
 
-Start the Windows server:
+Check and provision the Windows driver from WSL:
 
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1
+```bash
+mix playwriter.setup --mode windows
 ```
 
 ### Tests hang or timeout

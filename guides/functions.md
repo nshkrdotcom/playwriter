@@ -17,10 +17,9 @@ Execute a function with a managed browser session.
 - `fun` - Function that receives the browser context
 
 **Options:**
-- `:mode` - `:local` (default) or `:remote`
+- `:mode` - `:local` (default) or `:windows`
 - `:browser_type` - `:chromium` (default), `:firefox`, or `:webkit`
 - `:headless` - `true` (default) or `false`
-- `:ws_endpoint` - WebSocket URL for remote mode
 - `:timeout` - Operation timeout in milliseconds (default: 30000)
 
 **Returns:**
@@ -199,7 +198,7 @@ Returns the Playwriter version.
 **Example:**
 ```elixir
 Playwriter.version()
-# => "0.1.0"
+# => "0.4.0"
 ```
 
 ## Context Structure
@@ -284,7 +283,7 @@ Stop a browser session.
 
 ## Transport Behaviour
 
-Both local and remote transports implement `Playwriter.Transport.Behaviour`:
+The local and Windows transports implement `Playwriter.Transport.Behaviour`:
 
 ```elixir
 @callback start_link(keyword()) :: {:ok, pid()} | {:error, term()}

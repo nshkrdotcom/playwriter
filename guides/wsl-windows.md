@@ -1,94 +1,60 @@
-# WSL-Windows Integration
+# WSL–Windows Setup
 
-This guide covers using Playwriter to control visible browsers on Windows from Elixir running in WSL (Windows Subsystem for Linux).
+Use `mode: :windows` to run a visible Chromium on your Windows desktop with Elixir in WSL. Playwriter launches a Windows Node worker via PowerShell and communicates over stdio. The supported path requires WSL interop and a Windows desktop session for visible operation.
 
-## Why WSL-Windows Integration?
+## 1. Verify Windows Node
 
-When developing in WSL, you often want to:
-
-- **See the browser** - Watch your automation in real-time for debugging
-- **Test visual behavior** - Verify rendering, animations, and UI
-- **Debug interactively** - Pause and inspect the browser state
-- **Demo to stakeholders** - Show browser automation to non-technical users
-
-The challenge: browsers launched from WSL run headless or in a virtual display, and WSL2's Hyper-V networking blocks most connection attempts to Windows. Playwriter solves this with the `:windows` mode.
-
-## Architecture
-
-```
-┌────────────────────────────────────────────────────────────┐
-│                         WSL 2                              │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              Your Elixir Application                │   │
-│  │                                                     │   │
-│  │   Playwriter.fetch_html("https://example.com",      │   │
-│  │     mode: :windows)                                 │   │
-│  └───────────────────────┬─────────────────────────────┘   │
-│                          │                                 │
-│                          │ Erlang Port                     │
-│                          │ (stdin/stdout via PowerShell)   │
-└──────────────────────────┼─────────────────────────────────┘
-                           │
-┌──────────────────────────┼─────────────────────────────────┐
-│                          ▼                    Windows      │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              PowerShell + Node.js                   │   │
-│  │              (runs Playwright directly)             │   │
-│  └───────────────────────┬─────────────────────────────┘   │
-│                          │                                 │
-│                          ▼                                 │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              Browser Window                         │   │
-│  │              (Visible on Windows Desktop)           │   │
-│  └─────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────┘
-```
-
-The `:windows` mode bypasses WSL2's Hyper-V firewall entirely by communicating via PowerShell stdin/stdout instead of network sockets.
-
-## Setup
-
-### 1. Install Node.js on Windows
-
-The Playwright driver runs on Node.js. Install Node.js on Windows (not WSL):
+Use your Windows workstation bootstrap to provision a supported Node LTS. In **Windows PowerShell**, run:
 
 ```powershell
-# Using winget
-winget install OpenJS.NodeJS.LTS
-
-# Or download from https://nodejs.org
+Get-Command node.exe, npm.cmd
+node.exe --version
+npm.cmd --version
 ```
 
-### 2. Install Playwright on Windows
-
-Run the setup script from WSL:
+The driver needs Node 20 or newer. Verify the same account that WSL uses. To check interop from **WSL**:
 
 ```bash
-# One-time setup - installs Playwright in Windows temp directory
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
+powershell.exe -NoProfile -NonInteractive -Command 'whoami; $env:TEMP'
 ```
 
-This creates `%TEMP%\playwriter-server` on Windows with Playwright installed.
+Playwriter selects PowerShell 7 at its standard installation path when available and can use inbox Windows PowerShell. Open a fresh shell after changing Windows PATH. A WSL Node already installed by asdf only serves the local transport.
 
-### 3. Use from Elixir
+## 2. Provision the Windows driver and Chromium
 
-```elixir
-# Simple fetch
-{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
+From **WSL**, at your Mix project:
 
-# Screenshot
-{:ok, png} = Playwriter.screenshot("https://example.com", mode: :windows)
-File.write!("screenshot.png", png)
-
-# Full browser control
-Playwriter.with_browser([mode: :windows], fn ctx ->
-  :ok = Playwriter.goto(ctx, "https://example.com")
-  :ok = Playwriter.fill(ctx, "input[name=q]", "search term")
-  :ok = Playwriter.click(ctx, "button[type=submit]")
-  {:ok, html} = Playwriter.content(ctx)
-  html
-end)
+```bash
+mix deps.get
+mix playwriter.setup --mode windows
+mix playwriter.setup --mode windows --check
 ```
+
+Setup checks the target account and Windows Node/npm before writing files. It installs the locked driver and stages the stdio worker under a versioned `playwriter-stdio-*` directory in the active Windows account's temp folder. The matching browser goes in Playwright's Windows browser cache. Expect `Playwriter windows driver and chromium ready.` The check uses the staged driver and does not download files. Re-run setup if Windows temp gets cleared or Playwriter reports that the worker is stale.
+
+If you configure `config :playwriter, :windows_user, "YourWindowsUser"`, the value must match the active Windows PowerShell account. Run WSL under the intended Windows account to change which desktop and cache the worker uses.
+
+### Use an installed Windows browser
+
+Managed Chromium is the default. If Windows policy blocks that build, select a browser your host already allows using Playwright's `msedge` or `chrome` channel. In WSL, for example:
+
+```bash
+export PLAYWRITER_WINDOWS_CHANNEL=msedge
+mix playwriter.setup --mode windows
+mix playwriter.setup --mode windows --check
+```
+
+Keep the same setting for browser runs. You can also configure `config :playwriter, :windows_channel, "msedge"`. Channel setup uses the installed browser and skips the managed browser download. The read-only check verifies installed files. Use the smoke test below to verify Windows allows the browser to launch and be automated.
+
+## 3. Open a visible browser
+
+From **WSL**, run:
+
+```bash
+mix run -e 'IO.inspect(Playwriter.fetch_html("data:text/html,<h1>Playwriter</h1>", mode: :windows))'
+```
+
+The command prints the HTML and closes the browser when it finishes. For an interactive example, use `mix run examples/windows_browser.exs` from a source checkout.
 
 ## Development Workflow
 
@@ -134,92 +100,4 @@ Playwriter.with_browser([mode: :windows], fn ctx ->
 end)
 ```
 
-## How It Works
-
-The `:windows` mode uses the `Playwriter.Transport.WindowsCmd` transport which:
-
-1. Writes a Node.js script to `%TEMP%\playwriter-server\transport.js` on Windows
-2. Launches PowerShell with that script via Erlang Ports
-3. Communicates via JSON messages over stdin/stdout
-4. The Node.js script controls Playwright/Chromium on Windows
-
-This approach completely bypasses networking, avoiding all WSL2 Hyper-V firewall issues.
-
-## Troubleshooting
-
-### "Playwright not installed" or "Cannot find module 'playwright'"
-
-Run the setup script with `-Install`:
-
-```bash
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
-```
-
-Or manually install on Windows:
-
-```powershell
-cd $env:TEMP\playwriter-server
-npm install playwright
-npx playwright install chromium
-```
-
-### "Timeout waiting for transport to start"
-
-Check that:
-1. Node.js is installed on Windows and in PATH
-2. Playwright is installed in `%TEMP%\playwriter-server`
-
-Test manually:
-
-```bash
-# From WSL
-powershell.exe -Command "cd $env:TEMP\playwriter-server; node -e 'console.log(require(\"playwright\").chromium)'"
-```
-
-### "Browser closes immediately"
-
-Make sure you're not letting the session close. Use `with_browser` to keep the browser open:
-
-```elixir
-Playwriter.with_browser([mode: :windows], fn ctx ->
-  :ok = Playwriter.goto(ctx, "https://example.com")
-  Process.sleep(5000)  # Keep browser open for 5 seconds
-  :ok
-end)
-```
-
-### "PowerShell execution policy error"
-
-Always run with `-ExecutionPolicy Bypass`:
-
-```bash
-powershell.exe -ExecutionPolicy Bypass -File script.ps1
-```
-
-### Checking Windows User Detection
-
-The transport detects your Windows username from `/mnt/c/Users/`. If it picks the wrong user:
-
-```elixir
-# Check what user is detected
-File.ls!("/mnt/c/Users")
-|> Enum.reject(&(&1 in ["Public", "Default", "Default User", "All Users", "desktop.ini"]))
-```
-
-## Comparison: Windows Mode vs Remote Mode
-
-| Feature | `:windows` mode | `:remote` mode |
-|---------|----------------|----------------|
-| Setup required | Just npm install | Run a server |
-| Network issues | None (stdin/stdout) | WSL2 firewall blocks it |
-| Performance | Good | Slightly faster |
-| WSL2 compatible | Yes | No (blocked by Hyper-V) |
-| Recommended for WSL | **Yes** | No |
-
-Use `:windows` mode for WSL-to-Windows browser automation. The `:remote` mode exists for other distributed scenarios but doesn't work reliably from WSL2.
-
-## Next Steps
-
-- [Architecture Overview](architecture.md) - Understand the full system design
-- [Function Reference](functions.md) - Complete function documentation
-- [Examples](examples.md) - More code examples
+For setup failures see [Troubleshooting](troubleshooting.md). The legacy WebSocket transport `:remote` is unsupported.

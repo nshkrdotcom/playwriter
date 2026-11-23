@@ -53,10 +53,7 @@ defmodule Playwriter.Examples.Support do
         end
 
       :remote ->
-        case check_remote_available(opts[:endpoint]) do
-          {:ok, endpoint} -> {:ok, :remote, build_opts(:remote, opts, endpoint)}
-          {:error, reason} -> {:error, :remote_unavailable, reason}
-        end
+        {:error, :remote_unavailable, :not_supported}
 
       :auto ->
         # Try windows first (best for WSL), then local
@@ -74,62 +71,19 @@ defmodule Playwriter.Examples.Support do
   end
 
   defp check_local_available do
-    # Check if playwright has its dependencies installed
-    # The playwright dependency installs node_modules in priv/static
-    playwright_cli_paths = [
-      Path.join(["deps", "playwright", "priv", "static", "node_modules", "playwright", "cli.js"]),
-      Path.join(["deps", "playwright", "priv", "static", "node_modules", ".bin", "playwright"])
-    ]
+    cli =
+      System.get_env("PLAYWRIGHT_CLI") ||
+        Application.get_env(:playwriter, :playwright_cli) ||
+        Playwriter.Setup.local_cli()
 
-    if Enum.any?(playwright_cli_paths, &File.exists?/1) do
-      :ok
-    else
-      {:error, :playwright_not_installed}
-    end
+    if File.regular?(cli), do: :ok, else: {:error, :playwright_not_installed}
   end
 
   defp check_windows_available do
-    # Check if we're in WSL and can access Windows
-    if File.exists?("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe") do
-      # Check if playwright is installed in Windows temp
-      windows_user = detect_windows_user()
-
-      playwright_path =
-        "/mnt/c/Users/#{windows_user}/AppData/Local/Temp/playwriter-server/node_modules/playwright"
-
-      if File.exists?(playwright_path) do
-        :ok
-      else
-        {:error, :playwright_not_installed_on_windows}
-      end
-    else
-      {:error, :not_wsl}
-    end
-  end
-
-  defp detect_windows_user do
-    case File.ls("/mnt/c/Users") do
-      {:ok, entries} ->
-        entries
-        |> Enum.reject(&(&1 in ["Public", "Default", "Default User", "All Users", "desktop.ini"]))
-        |> Enum.find(fn name ->
-          path = "/mnt/c/Users/#{name}"
-          File.dir?(path) and not String.starts_with?(name, ".")
-        end) || "Default"
-
-      _ ->
-        "Default"
-    end
-  end
-
-  defp check_remote_available(explicit_endpoint) do
-    if explicit_endpoint do
-      {:ok, explicit_endpoint}
-    else
-      case Playwriter.Server.Discovery.discover(timeout: 2000) do
-        {:ok, endpoint} -> {:ok, endpoint}
-        {:error, _} -> {:error, :server_not_found}
-      end
+    with {:ok, channel} <- Playwriter.Setup.windows_channel(),
+         {:ok, dir, mount} <- Playwriter.Setup.windows_tools(),
+         :ok <- Playwriter.Setup.check_installed_channel(channel) do
+      Playwriter.Setup.check_windows_driver(dir, mount, channel)
     end
   end
 
@@ -140,16 +94,8 @@ defmodule Playwriter.Examples.Support do
     ]
   end
 
-  defp build_opts(:windows, _opts) do
-    [mode: :windows]
-  end
-
-  defp build_opts(:remote, opts, endpoint) do
-    [
-      mode: :remote,
-      ws_endpoint: endpoint,
-      headless: Keyword.get(opts, :headless, false)
-    ]
+  defp build_opts(:windows, opts) do
+    [mode: :windows, headless: Keyword.get(opts, :headless, false)]
   end
 
   @doc """
@@ -196,9 +142,7 @@ defmodule Playwriter.Examples.Support do
     IO.puts("")
     IO.puts("  1. Install Playwright on Windows:")
 
-    IO.puts(
-      "     powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install"
-    )
+    IO.puts("     mix playwriter.setup --mode windows")
 
     IO.puts("")
     IO.puts("  2. Run with --windows flag:")
@@ -227,9 +171,7 @@ defmodule Playwriter.Examples.Support do
         IO.puts("Run the setup script:")
         IO.puts("")
 
-        IO.puts(
-          "    powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install"
-        )
+        IO.puts("    mix playwriter.setup --mode windows")
 
         IO.puts("")
         IO.puts("Then try again.")
@@ -238,22 +180,8 @@ defmodule Playwriter.Examples.Support do
     IO.puts("")
   end
 
-  def print_error(:remote_unavailable, _reason) do
-    IO.puts("")
-    IO.puts("=" |> String.duplicate(60))
-    IO.puts("ERROR: Remote mode not available")
-    IO.puts("=" |> String.duplicate(60))
-    IO.puts("")
-    IO.puts("Remote mode is disabled from WSL2 due to Hyper-V networking issues.")
-    IO.puts("")
-    IO.puts("Use Windows mode instead (recommended):")
-    IO.puts("")
-    IO.puts("    mix run <example> --windows")
-    IO.puts("")
-    IO.puts("Or use local mode for headless automation:")
-    IO.puts("")
-    IO.puts("    mix run <example> --local")
-    IO.puts("")
+  def print_error(:remote_unavailable, :not_supported) do
+    IO.puts("Remote WebSocket mode is unsupported. Use --windows from WSL.")
   end
 
   def print_error(:no_mode_available, _reason) do
@@ -268,9 +196,7 @@ defmodule Playwriter.Examples.Support do
     IO.puts("")
     IO.puts("  1. Install Playwright on Windows:")
 
-    IO.puts(
-      "     powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install"
-    )
+    IO.puts("     mix playwriter.setup --mode windows")
 
     IO.puts("")
     IO.puts("  2. Run example:")
@@ -314,9 +240,7 @@ defmodule Playwriter.Examples.Support do
         IO.puts("")
         IO.puts("Run the setup script:")
 
-        IO.puts(
-          "  powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install"
-        )
+        IO.puts("  mix playwriter.setup --mode windows")
 
       :remote ->
         IO.puts("This may indicate:")

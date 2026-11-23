@@ -37,22 +37,18 @@ Add to your `mix.exs`:
 
 ```elixir
 def deps do
-  [{:playwriter, "~> 0.2.0"}]
+  [{:playwriter, "~> 0.4.0"}]
 end
 ```
 
-Then run setup (installs the Node Playwright driver + Chromium for the `:local`
-transport, pinned in the project's `package.json`):
+Playwriter requires Elixir 1.18 or newer. Install a supported Node LTS (minimum Node 20) in the environment that runs the selected browser driver.
 
-```bash
-mix deps.get
-mix playwriter.setup            # add --with-deps to also install OS libs (needs sudo)
-```
+| Mode | Driver environment | Setup from your Mix project |
+| --- | --- | --- |
+| Local headless | Your Mix shell | `mix playwriter.setup` |
+| Visible Windows from WSL | Windows PowerShell | `mix playwriter.setup --mode windows` |
 
-The `:local` transport resolves the driver from `PLAYWRIGHT_CLI`,
-`config :playwriter, :playwright_cli`, or `node_modules/playwright/cli.js` (in
-that order). `:windows` mode needs no local setup — it provisions its own Node
-Playwright on the Windows side.
+Run `mix deps.get` first. Add `--check` to either setup command to verify prerequisites and installed assets. See [Getting Started](guides/getting-started.md) for setup paths and CLI overrides.
 
 ### Basic Usage (Local/Headless)
 
@@ -67,12 +63,14 @@ File.write!("screenshot.png", png)
 
 ### WSL to Windows (Visible Browser)
 
-**One-time setup on Windows:**
+From WSL, after installing Windows Node and npm through your workstation setup:
 
-```powershell
-# Run from WSL - installs Playwright in Windows temp directory
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1 -Install
+```bash
+mix playwriter.setup --mode windows
+mix playwriter.setup --mode windows --check
 ```
+
+See [WSL–Windows Setup](guides/wsl-windows.md) for the Windows and WSL checks.
 
 **Use from Elixir:**
 
@@ -180,13 +178,13 @@ end)
 Binary returns (e.g. `screenshot/3`) use an explicit base64 contract and come
 back as decoded binaries. See the **Automation Capabilities** guide for details.
 
-## Three Modes
+## Browser Modes
 
 | Mode | Use Case | Browser Location |
 |------|----------|------------------|
 | `:local` (default) | CI/CD, headless scraping | Same machine as Elixir |
 | `:windows` | WSL development, debugging, demos | Windows desktop (visible) |
-| `:remote` | Distributed automation (advanced) | Remote server |
+
 
 ```elixir
 # Local mode - fast, headless
@@ -201,7 +199,7 @@ Playwriter.fetch_html(url, mode: :windows)
 
 ```elixir
 Playwriter.fetch_html(url,
-  mode: :windows,                   # :local, :windows, or :remote
+  mode: :windows,                   # :local or :windows
   headless: false,                  # true for invisible, false to watch
   browser_type: :chromium,          # :chromium (only for :windows mode)
   timeout: 30_000                   # milliseconds
@@ -241,7 +239,7 @@ The `:windows` mode bypasses WSL2's Hyper-V networking entirely by communicating
 
 - **[Getting Started](guides/getting-started.md)** - Installation and first steps
 - **[Architecture](guides/architecture.md)** - How Playwriter works
-- **[Transport Layer](guides/transports.md)** - Local, Windows, and Remote modes
+- **[Transport Layer](guides/transports.md)** - Local and Windows transports
 - **[WSL-Windows Integration](guides/wsl-windows.md)** - Detailed setup guide
 - **[Function Reference](guides/functions.md)** - Complete function documentation
 - **[Examples](guides/examples.md)** - Real-world usage patterns

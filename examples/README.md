@@ -11,22 +11,16 @@ Before running examples, you need either:
 mix playwriter.setup
 ```
 
-**Option B: Remote Mode (WSL to Windows)**
+**Option B: Windows Mode (from WSL)**
 ```bash
-# From WSL (bypass execution policy)
-powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1
+# From WSL after installing Windows Node/npm
+mix playwriter.setup --mode windows
 ```
 
-Or manually on Windows PowerShell:
-```powershell
-cd $env:TEMP; mkdir playwriter-server -ErrorAction SilentlyContinue; cd playwriter-server
-npm init -y; npm install playwright; npx playwright install chromium
-node -e "const{chromium}=require('playwright');chromium.launchServer({headless:false,port:3337}).then(s=>console.log(s.wsEndpoint()))"
-```
 
 ## Running Examples
 
-All examples support both local and remote modes:
+The general-purpose examples support local and Windows modes:
 
 ```bash
 # Auto-detect available mode
@@ -35,11 +29,9 @@ mix run examples/fetch_html.exs
 # Force local mode (headless browser on this machine)
 mix run examples/fetch_html.exs --local
 
-# Force remote mode (visible browser on Windows)
-mix run examples/fetch_html.exs --remote
+# Force Windows mode (visible browser on Windows)
+mix run examples/fetch_html.exs --windows
 
-# Remote with explicit endpoint
-mix run examples/fetch_html.exs --remote --endpoint ws://localhost:3337/
 ```
 
 ## Available Examples
@@ -137,7 +129,7 @@ mix run examples/windows_browser.exs
 
 **Output:** `windows_screenshot.png`
 
-**This example is remote-only** - it's specifically for demonstrating the WSL-to-Windows feature.
+**This example uses Windows mode** - it's specifically for demonstrating the WSL-to-Windows feature.
 
 ---
 
@@ -148,19 +140,18 @@ All examples support these flags:
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--local` | `-l` | Force local mode (headless) |
-| `--remote` | `-r` | Force remote mode (Windows) |
-| `--endpoint URL` | `-e` | Specify WebSocket endpoint |
-| `--headless` | `-h` | Run headless (even in remote mode) |
+| `--windows` | `-w` | Force visible Windows mode |
+| `--headless` | `-h` | Run headless (in either mode) |
 
 ## Mode Auto-Detection
 
-When you don't specify `--local` or `--remote`, examples auto-detect:
+When you don't specify `--local` or `--windows`, examples auto-detect:
 
-1. **Try remote first** - Check if a Windows server is running
-2. **Fall back to local** - If no server, try local Playwright
+1. **Try Windows first** - Check the Windows stdio driver
+2. **Fall back to local** - Check the local driver if Windows is unavailable
 3. **Show error** - If neither works, show setup instructions
 
-This means in WSL with a Windows server running, examples automatically use remote mode and show you the browser.
+From WSL with Windows setup complete, the default opens a visible browser on Windows.
 
 ## Error Messages
 
@@ -180,12 +171,12 @@ To use local mode, run:
 **No Windows server:**
 ```
 ============================================================
-ERROR: No Playwright server found
+
 ============================================================
 
-To use remote mode, start the Windows server:
 
-    powershell.exe -ExecutionPolicy Bypass -File priv/scripts/start_server.ps1
+
+    mix playwriter.setup --mode windows
 ```
 
 ## Writing Your Own Scripts
@@ -200,13 +191,13 @@ Use the examples as templates:
 
 # With options
 {:ok, html} = Playwriter.fetch_html("https://mysite.com",
-  mode: :remote,        # or :local
+  mode: :windows,        # or :local
   headless: false,      # show browser
   timeout: 60_000       # 60 second timeout
 )
 
 # Complex interaction
-{:ok, result} = Playwriter.with_browser([mode: :remote], fn ctx ->
+{:ok, result} = Playwriter.with_browser([mode: :windows], fn ctx ->
   :ok = Playwriter.goto(ctx, "https://mysite.com/login")
   :ok = Playwriter.fill(ctx, "#email", "me@example.com")
   :ok = Playwriter.fill(ctx, "#password", "secret")
@@ -229,17 +220,17 @@ mix run my_script.exs
 
 ### Examples fail immediately
 
-Check that you have either local Playwright or Windows server:
+Check that you have the required driver for your mode:
 
 ```bash
 # Check local
-ls deps/playwright/priv/static/node_modules/playwright/cli.js
+mix playwriter.setup --check
 
-# Check remote (should show endpoint)
-mix run -e "IO.inspect Playwriter.Server.Discovery.discover()"
+# Check Windows from WSL
+mix playwriter.setup --mode windows --check
 ```
 
-### Browser doesn't appear in remote mode
+### Browser doesn't appear in Windows mode
 
 Make sure you're not passing `--headless`:
 ```bash

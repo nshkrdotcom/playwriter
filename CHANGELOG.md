@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-23
+
+### Added
+- Explicit WSL-to-Windows stdio setup and read-only setup checks for both modes.
+- Support for installed Edge and Chrome channels in Windows mode.
+- Windows and local onboarding with separate runtime prerequisites and browser/cache guidance.
+
+### Changed
+- Migrated the local transport to the handle-based `playwright_ex` 1.65 release candidate, with npm Playwright pinned to 1.65.1. Thanks to Fredrik Teschke ([@ftes](https://github.com/ftes)) for [PR #1](https://github.com/nshkrdotcom/playwriter/pull/1).
+- The minimum Elixir version is now 1.18 and the managed driver requires Node.js 20 or newer. Local raw transport messages now return `{:error, :not_supported}`.
+- Local evaluation still uses Playwriter's call timeout. The new upstream evaluation and init-script APIs lack per-call driver timeout options.
+- Updated the locked Mix dependencies, including NimbleOptions, Mox, ExDoc and Dialyxir.
+
+### Fixed
+- Windows startup checks the active account, runtime and staged browser driver before launch. Setup uses the active account's actual temp directory.
+- Packaged local setup uses its own locked driver assets and leaves the consuming application's npm manifest alone.
+
 ## [0.3.0] - 2026-07-07
 
 ### Fixed

@@ -158,7 +158,7 @@ The `:local` transport shells out to a Node Playwright driver. Provision it
 reproducibly:
 
 ```bash
-mix playwriter.setup            # npm ci + npx playwright install chromium
+mix playwriter.setup            # install the pinned driver and Chromium
 mix playwriter.setup --with-deps  # also install OS libraries (needs sudo)
 ```
 

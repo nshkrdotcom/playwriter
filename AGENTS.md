@@ -76,15 +76,13 @@ The version is hardcoded in **two** places and both must match, or
 - `mix.exs` `@version`
 - `lib/playwriter.ex` `def version, do: "..."`
 
-## The two Node Playwrights
+## Driver setup
 
-- `:local` uses the driver resolved from `PLAYWRIGHT_CLI` /
-  `config :playwriter, :playwright_cli` / `node_modules/playwright/cli.js`
-  (pinned in the repo `package.json`, tracking the version `playwright_ex`
-  targets). Provision with `mix playwriter.setup`.
-- `:windows` provisions its **own** Node Playwright on the Windows side (pinned
-  in the `package.json` heredoc in `windows_cmd.ex`). Keep the two versions in
-  the same major line.
+`:local` resolves the CLI from `PLAYWRIGHT_CLI`, application configuration, or
+the driver staged by `mix playwriter.setup`. `:windows` uses Windows Node and
+the stdio worker staged by `mix playwriter.setup --mode windows`. Both setup
+paths consume the pinned npm manifests under `priv/driver`. Use `--check` to
+inspect a setup without installing packages.
 
 ## Packaging
 
