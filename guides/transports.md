@@ -108,7 +108,7 @@ end)
 One-time installation:
 
 ```bash
-mix playwriter.setup --mode windows
+PLAYWRITER_WINDOWS_CHANNEL=chrome mix playwriter.setup --mode windows
 ```
 
 ### Advantages

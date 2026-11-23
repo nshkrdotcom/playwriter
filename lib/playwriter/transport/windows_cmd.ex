@@ -53,7 +53,7 @@ defmodule Playwriter.Transport.WindowsCmd do
 
       switch (cmd.method) {
         case 'launch':
-          browser = await chromium.launch({ headless: cmd.params?.headless ?? false, channel: cmd.params?.channel || undefined });
+          browser = await chromium.launch({ headless: cmd.params?.headless ?? false, channel: cmd.params?.channel || undefined, timeout: cmd.params?.timeout ?? 30000 });
           result = { guid: 'browser-1' };
           break;
 
@@ -329,8 +329,8 @@ defmodule Playwriter.Transport.WindowsCmd do
   # Server callbacks
 
   @impl GenServer
-  def init(_opts) do
-    with {:ok, channel} <- Setup.windows_channel(),
+  def init(opts) do
+    with {:ok, channel} <- Setup.windows_channel(opts[:windows_browser]),
          {:ok, dir, mount} <- Setup.windows_tools(),
          :ok <- Setup.check_installed_channel(channel),
          :ok <- Setup.check_windows_driver(dir, mount, channel) do
@@ -426,7 +426,7 @@ defmodule Playwriter.Transport.WindowsCmd do
     send_command(
       state,
       "launch",
-      %{headless: opts[:headless] || false, channel: state.channel},
+      %{headless: opts[:headless] || false, channel: state.channel, timeout: opts[:timeout]},
       from
     )
   end

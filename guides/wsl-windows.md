@@ -20,31 +20,24 @@ powershell.exe -NoProfile -NonInteractive -Command 'whoami; $env:TEMP'
 
 Playwriter selects PowerShell 7 at its standard installation path when available and can use inbox Windows PowerShell. Open a fresh shell after changing Windows PATH. A WSL Node already installed by asdf only serves the local transport.
 
-## 2. Provision the Windows driver and Chromium
+## 2. Choose and verify a Windows browser
 
-From **WSL**, at your Mix project:
+From **WSL**, at your Mix project, select a browser that is already installed on Windows:
 
 ```bash
 mix deps.get
+export PLAYWRITER_WINDOWS_CHANNEL=chrome  # or msedge
 mix playwriter.setup --mode windows
 mix playwriter.setup --mode windows --check
 ```
 
-Setup checks the target account and Windows Node/npm before writing files. It installs the locked driver and stages the stdio worker under a versioned `playwriter-stdio-*` directory in the active Windows account's temp folder. The matching browser goes in Playwright's Windows browser cache. Expect `Playwriter windows driver and chromium ready.` The check uses the staged driver and does not download files. Re-run setup if Windows temp gets cleared or Playwriter reports that the worker is stale.
+You can select `--browser chrome`, `--browser msedge`, or `--browser chromium` for a single setup command. The flag takes precedence over `PLAYWRITER_WINDOWS_CHANNEL`, which takes precedence over `config :playwriter, :windows_channel, "chrome"`. For subsequent runs, set the environment variable or application config to the same browser. With no selection, Windows setup prints the choices. Existing Windows runtime calls with no selection continue to use managed Chromium.
+
+Installed Chrome and Edge use the pinned driver staged under `playwriter-stdio-*` in the active Windows account's temp folder. This setup does not download a browser. Use `--browser chromium` or set the channel to `chromium` to opt into Playwright-managed **Chrome for Testing** in the Windows Playwright cache. Windows Code Integrity can block that unsigned build. To run Chrome for Testing visibly in WSL, see [Getting Started](getting-started.md#visible-chrome-for-testing-in-wsl).
+
+Setup reports ready after the chosen browser opens, loads a local test page, and closes. `--check` checks prerequisites and files without launching the browser. Re-run setup if Windows temp is cleared or Playwriter reports a stale worker.
 
 If you configure `config :playwriter, :windows_user, "YourWindowsUser"`, the value must match the active Windows PowerShell account. Run WSL under the intended Windows account to change which desktop and cache the worker uses.
-
-### Use an installed Windows browser
-
-Managed Chromium is the default. If Windows policy blocks that build, select a browser your host already allows using Playwright's `msedge` or `chrome` channel. In WSL, for example:
-
-```bash
-export PLAYWRITER_WINDOWS_CHANNEL=msedge
-mix playwriter.setup --mode windows
-mix playwriter.setup --mode windows --check
-```
-
-Keep the same setting for browser runs. You can also configure `config :playwriter, :windows_channel, "msedge"`. Channel setup uses the installed browser and skips the managed browser download. The read-only check verifies installed files. Use the smoke test below to verify Windows allows the browser to launch and be automated.
 
 ## 3. Open a visible browser
 

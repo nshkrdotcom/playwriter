@@ -80,7 +80,8 @@ The version is hardcoded in **two** places and both must match, or
 
 `:local` resolves the CLI from `PLAYWRIGHT_CLI`, application configuration, or
 the driver staged by `mix playwriter.setup`. `:windows` uses Windows Node and
-the stdio worker staged by `mix playwriter.setup --mode windows`. Both setup
+the stdio worker staged by `mix playwriter.setup --mode windows --browser chrome`
+(or by choosing another supported browser). Both setup
 paths consume the pinned npm manifests under `priv/driver`. Use `--check` to
 inspect a setup without installing packages.
 

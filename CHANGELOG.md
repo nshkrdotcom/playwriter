@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Explicit WSL-to-Windows stdio setup and read-only setup checks for both modes.
-- Support for installed Edge and Chrome channels in Windows mode.
+- Explicit Windows setup for installed Chrome, installed Edge, or managed Chrome for Testing. Installed browser channels provision only the driver.
 - Windows and local onboarding with separate runtime prerequisites and browser/cache guidance.
 
 ### Changed
@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated the locked Mix dependencies, including NimbleOptions, Mox, ExDoc and Dialyxir.
 
 ### Fixed
+- Setup reports readiness after a browser launch, local navigation and shutdown. File checks remain available separately with `--check`.
 - Windows startup checks the active account, runtime and staged browser driver before launch. Setup uses the active account's actual temp directory.
 - Packaged local setup uses its own locked driver assets and leaves the consuming application's npm manifest alone.
 

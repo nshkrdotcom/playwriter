@@ -8,7 +8,7 @@
 #
 # Prerequisites:
 #   Install Playwright on Windows first:
-#     mix playwriter.setup --mode windows
+#     mix playwriter.setup --mode windows --browser chrome
 #
 # For local-only automation, use the other examples with --local flag.
 
@@ -89,7 +89,7 @@ case Support.detect_mode(:windows, opts) do
         IO.puts("Run the setup script first:")
         IO.puts("")
 
-        IO.puts("    mix playwriter.setup --mode windows")
+        IO.puts("    mix playwriter.setup --mode windows --browser chrome")
 
         IO.puts("")
         IO.puts("Then run this example again.")

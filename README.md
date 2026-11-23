@@ -46,9 +46,10 @@ Playwriter requires Elixir 1.18 or newer. Install a supported Node LTS (minimum 
 | Mode | Driver environment | Setup from your Mix project |
 | --- | --- | --- |
 | Local headless | Your Mix shell | `mix playwriter.setup` |
-| Visible Windows from WSL | Windows PowerShell | `mix playwriter.setup --mode windows` |
+| Visible Chrome for Testing via WSLg | WSL | `mix playwriter.setup`, then run with `headless: false` |
+| Native Windows from WSL | Windows PowerShell | `mix playwriter.setup --mode windows --browser chrome` |
 
-Run `mix deps.get` first. Add `--check` to either setup command to verify prerequisites and installed assets. See [Getting Started](guides/getting-started.md) for setup paths and CLI overrides.
+Run `mix deps.get` first. Setup verifies browser launch, navigation and shutdown. Add `--check` to inspect prerequisites and installed files without launching a browser. See [Getting Started](guides/getting-started.md) for setup paths and CLI overrides.
 
 ### Basic Usage (Local/Headless)
 
@@ -66,6 +67,7 @@ File.write!("screenshot.png", png)
 From WSL, after installing Windows Node and npm through your workstation setup:
 
 ```bash
+export PLAYWRITER_WINDOWS_CHANNEL=chrome # or msedge for installed Edge
 mix playwriter.setup --mode windows
 mix playwriter.setup --mode windows --check
 ```

@@ -6,16 +6,16 @@ Check the transport you intend to use:
 
 ```bash
 mix playwriter.setup --mode local --check
-mix playwriter.setup --mode windows --check
+mix playwriter.setup --mode windows --browser chrome --check
 ```
 
-Run the matching command without `--check` to provision missing or stale assets. If you use `PLAYWRIGHT_BROWSERS_PATH`, use the same path for setup and runtime. A local Linux launch that reports missing system libraries can be repaired with `mix playwriter.setup --with-deps` when you intend to authorize those package changes.
+These commands check prerequisites and files. Run the matching command without `--check` to provision missing or stale assets and verify launch. If you use `PLAYWRIGHT_BROWSERS_PATH`, use the same path for setup and runtime. A local Linux launch that reports missing system libraries can be repaired with `mix playwriter.setup --with-deps` when you intend to authorize those package changes.
 
 ## Windows Node or PowerShell missing
 
 Verify the Windows runtime with `Get-Command node.exe, npm.cmd` from Windows PowerShell and check WSL interop with `powershell.exe -NoProfile -NonInteractive -Command 'whoami; $env:TEMP'` from WSL. See [WSL–Windows Setup](wsl-windows.md) for account and PATH checks. A user override must match the account running the PowerShell process.
 
-If Windows Code Integrity blocks the managed Chromium build, use a supported, installed browser channel permitted by your host policy. See [Use an installed Windows browser](wsl-windows.md#use-an-installed-windows-browser).
+If Windows Code Integrity blocks the managed Chromium build, use a supported, installed browser channel permitted by your host policy. See [Choose and verify a Windows browser](wsl-windows.md#2-choose-and-verify-a-windows-browser).
 
 ## Browser opens and immediately closes
 

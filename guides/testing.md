@@ -21,8 +21,8 @@ Playwriter tests are organized by what infrastructure they require:
 |-----|----------|----------|
 | (none) | Nothing | `mix test` |
 | `:requires_browser` | Local Playwright | `INTEGRATION=true mix test` |
-| `:requires_windows_server` | Windows server | `WINDOWS_SERVER=true mix test` |
-| `:wsl_only` | WSL environment | `WINDOWS_SERVER=true mix test` |
+| `:requires_windows_server` | Windows server | `PLAYWRITER_WINDOWS_CHANNEL=chrome WINDOWS_SERVER=true mix test` |
+| `:wsl_only` | WSL environment | `PLAYWRITER_WINDOWS_CHANNEL=chrome WINDOWS_SERVER=true mix test` |
 | `:integration` | Local Playwright | `INTEGRATION=true mix test` |
 
 ## Running Tests
@@ -64,8 +64,8 @@ These tests verify:
 From WSL, run the capability and session tests against the Windows desktop:
 
 ```bash
-mix playwriter.setup --mode windows
-WINDOWS_SERVER=true mix test test/playwriter/capabilities_integration_test.exs test/playwriter/browser/session_test.exs
+PLAYWRITER_WINDOWS_CHANNEL=chrome mix playwriter.setup --mode windows
+PLAYWRITER_WINDOWS_CHANNEL=chrome WINDOWS_SERVER=true mix test test/playwriter/capabilities_integration_test.exs test/playwriter/browser/session_test.exs
 ```
 
 The historical `WINDOWS_SERVER` switch enables Windows stdio tests. Legacy discovery tests require the separate `--include requires_legacy_server` flag and a running legacy server.
@@ -79,10 +79,10 @@ To run the complete test suite:
 mix playwriter.setup
 
 # 2. Provision the Windows stdio driver
-mix playwriter.setup --mode windows
+PLAYWRITER_WINDOWS_CHANNEL=chrome mix playwriter.setup --mode windows
 
 # 3. Run all tests
-INTEGRATION=true WINDOWS_SERVER=true mix test
+PLAYWRITER_WINDOWS_CHANNEL=chrome INTEGRATION=true WINDOWS_SERVER=true mix test
 ```
 
 ## Test Infrastructure Setup
@@ -221,7 +221,7 @@ mix playwriter.setup
 Check and provision the Windows driver from WSL:
 
 ```bash
-mix playwriter.setup --mode windows
+PLAYWRITER_WINDOWS_CHANNEL=chrome mix playwriter.setup --mode windows
 ```
 
 ### Tests hang or timeout

@@ -5,7 +5,8 @@ Playwriter 0.4 requires Elixir 1.18 or newer and Node.js 20 or newer for the dri
 | Mode | Elixir runs in | Node and Chromium run in | Setup command |
 | --- | --- | --- | --- |
 | `:local` (default) | Your current shell | The same environment, headless by default | `mix playwriter.setup` |
-| `:windows` | WSL | Windows, visible by default | `mix playwriter.setup --mode windows` |
+| `:local` with `headless: false` | WSL | WSL, displayed through WSLg | `mix playwriter.setup` |
+| `:windows` | WSL | Windows, visible by default | `mix playwriter.setup --mode windows --browser chrome` |
 
 Add Playwriter to the dependencies in your application's `mix.exs`:
 
@@ -29,7 +30,17 @@ Setup installs the locked npm driver into `.playwriter-driver/` and downloads it
 
 The local transport honors `PLAYWRIGHT_CLI` and then `config :playwriter, :playwright_cli` when you supply a driver yourself. Use the npm driver version tested with this release.
 
-## Visible Windows browser from WSL
+## Visible Chrome for Testing in WSL
+
+After local setup, run with `mode: :local, headless: false` in a WSL shell with WSLg available:
+
+```bash
+mix run -e 'IO.inspect(Playwriter.fetch_html("data:text/html,<h1>Playwriter</h1>", mode: :local, headless: false))'
+```
+
+The browser runs in Linux and the window appears on the Windows desktop.
+
+## Native Windows browser from WSL
 
 Install Node and npm on the **Windows** host first. Then use the commands in [WSL–Windows Setup](wsl-windows.md) to verify interop and prepare Windows Chromium. Run Playwriter from WSL with `mode: :windows`.
 

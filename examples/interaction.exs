@@ -7,7 +7,7 @@
 #
 # Options:
 #   --local, -l      Use local Playwright (requires: mix playwriter.setup)
-#   --windows, -w    Use Windows stdio (requires: mix playwriter.setup --mode windows)
+#   --windows, -w    Use Windows stdio (requires: mix playwriter.setup --mode windows --browser chrome)
 #   --headless, -h   Run headless (default: true for local, false for Windows)
 #
 # This example demonstrates form interaction using with_browser.

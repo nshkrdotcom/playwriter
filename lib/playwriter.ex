@@ -13,8 +13,7 @@ defmodule Playwriter do
 
       # Fetch with visible browser on Windows
       {:ok, html} = Playwriter.fetch_html("https://example.com",
-        mode: :remote,
-        ws_endpoint: "ws://localhost:3337/"
+        mode: :windows
       )
 
       # Take a screenshot
@@ -84,7 +83,7 @@ defmodule Playwriter do
       end)
 
       # With visible Windows browser
-      {:ok, html} = Playwriter.with_browser(mode: :remote, fn ctx ->
+      {:ok, html} = Playwriter.with_browser([mode: :windows], fn ctx ->
         Playwriter.goto(ctx, "https://example.com")
         Playwriter.click(ctx, "#accept-cookies")
         Playwriter.content(ctx)
@@ -124,8 +123,7 @@ defmodule Playwriter do
       {:ok, html} = Playwriter.fetch_html("https://example.com")
 
       {:ok, html} = Playwriter.fetch_html("https://example.com",
-        mode: :remote,
-        ws_endpoint: "ws://localhost:3337/"
+        mode: :windows
       )
   """
   @spec fetch_html(String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}

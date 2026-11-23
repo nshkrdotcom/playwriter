@@ -536,14 +536,24 @@ defmodule Playwriter.Browser.Session do
   # returns an error, so the session's `with` short-circuits first.
   defp launch_or_get_browser(transport, Local, opts) do
     browser_type = opts[:browser_type] || :chromium
-    browser_opts = Keyword.take(opts, [:headless, :slow_mo, :executable_path])
+
+    browser_opts =
+      opts |> Keyword.take([:headless, :slow_mo, :executable_path]) |> with_launch_timeout(opts)
+
     Local.launch_browser(transport, browser_type, browser_opts)
   end
 
   defp launch_or_get_browser(transport, module, opts) do
     # WindowsCmd + any injected transport module.
-    browser_opts = Keyword.take(opts, [:headless])
+    browser_opts = opts |> Keyword.take([:headless]) |> with_launch_timeout(opts)
     module.launch_browser(transport, opts[:browser_type] || :chromium, browser_opts)
+  end
+
+  defp with_launch_timeout(browser_opts, opts) do
+    case Keyword.fetch(opts, :launch_timeout) do
+      {:ok, timeout} -> Keyword.put(browser_opts, :timeout, timeout)
+      :error -> browser_opts
+    end
   end
 
   defp create_context(state, opts) do

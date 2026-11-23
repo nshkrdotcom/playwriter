@@ -14,6 +14,7 @@ mix playwriter.setup
 **Option B: Windows Mode (from WSL)**
 ```bash
 # From WSL after installing Windows Node/npm
+export PLAYWRITER_WINDOWS_CHANNEL=chrome # or msedge
 mix playwriter.setup --mode windows
 ```
 
@@ -168,16 +169,10 @@ To use local mode, run:
     mix playwriter.setup
 ```
 
-**No Windows server:**
-```
-============================================================
+**Windows driver unavailable:**
 
-============================================================
-
-
-
-    mix playwriter.setup --mode windows
-```
+Select an installed browser and run `mix playwriter.setup --mode windows`
+as shown above. Use the same channel when running the examples.
 
 ## Writing Your Own Scripts
 

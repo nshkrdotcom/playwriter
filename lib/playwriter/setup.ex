@@ -1,10 +1,12 @@
 defmodule Playwriter.Setup do
   @moduledoc false
 
+  alias Playwriter.Browser.Session
   alias Playwriter.Transport.WindowsCmd
 
   @version "1.65.1"
   @local_dir ".playwriter-driver"
+  @local_browser_types %{"chromium" => :chromium, "firefox" => :firefox, "webkit" => :webkit}
   @browser_probe """
   const fs = require('node:fs');
   const driver = require('./node_modules/playwright');
@@ -15,6 +17,8 @@ defmodule Playwriter.Setup do
   if (!fs.existsSync(browser.executablePath()))
     throw new Error('Matching browser missing: ' + browser.executablePath());
   """
+
+  def driver_version, do: @version
 
   def local_dir, do: Path.expand(@local_dir)
   def local_cli, do: Path.join(local_dir(), "node_modules/playwright/cli.js")
@@ -97,11 +101,12 @@ defmodule Playwriter.Setup do
     end
   end
 
-  def install(:windows, "chromium", false, check) do
-    with {:ok, channel} <- windows_channel(),
-         {:ok, dir, mount} <- windows_tools(),
+  def install(:windows, browser, false, check) when browser in ["chromium", "chrome", "msedge"] do
+    channel = browser_channel(browser)
+
+    with {:ok, dir, mount} <- windows_tools(),
          :ok <- check_installed_channel(channel) do
-      prepare_windows(dir, mount, channel, check)
+      prepare_windows(dir, mount, browser, check)
     end
   end
 
@@ -114,23 +119,103 @@ defmodule Playwriter.Setup do
            :ok <- run(npm, ["ci"], dir),
            :ok <-
              run(node, browser_args("node_modules/playwright/cli.js", browser, with_deps), dir) do
-        probe_local(node, dir, browser)
+        smoke_local(browser)
       end
     end)
   end
 
-  defp prepare_windows(dir, mount, channel, true), do: check_windows_driver(dir, mount, channel)
+  defp prepare_windows(dir, mount, browser, true),
+    do: check_windows_driver(dir, mount, browser_channel(browser))
 
-  defp prepare_windows(dir, mount, channel, false) do
+  defp prepare_windows(dir, mount, browser, false) do
+    channel = browser_channel(browser)
+
     with_setup_lock(mount, fn ->
+      with :ok <- provision_windows(dir, mount, channel),
+           :ok <- check_windows_driver(dir, mount, channel) do
+        smoke(windows_browser_name(browser),
+          mode: :windows,
+          headless: false,
+          windows_browser: browser
+        )
+      end
+    end)
+  end
+
+  defp provision_windows(dir, mount, channel) do
+    if check_windows_driver(dir, mount, channel) == :ok do
+      :ok
+    else
       with :ok <- copy_driver(mount),
            :ok <- run_windows(dir, "npm.cmd", ["ci"]),
-           :ok <- install_windows_browser(dir, channel),
-           :ok <- File.write(Path.join(mount, "transport.js"), WindowsCmd.node_script()) do
-        check_windows_driver(dir, mount, channel)
+           :ok <- install_windows_browser(dir, channel) do
+        File.write(Path.join(mount, "transport.js"), WindowsCmd.node_script())
       end
+    end
+  end
+
+  defp smoke_local(browser) do
+    Enum.reduce_while(selected_local_browsers(browser), :ok, fn name, :ok ->
+      opts = [
+        mode: :local,
+        headless: true,
+        browser_type: Map.fetch!(@local_browser_types, name),
+        executable: local_cli()
+      ]
+
+      continue_if_ok(smoke(name, opts))
     end)
   end
+
+  defp smoke(browser, opts) do
+    with {:ok, _apps} <- Application.ensure_all_started(:playwriter) do
+      run_smoke(browser, opts)
+    end
+  end
+
+  defp run_smoke(browser, opts) do
+    task = Task.async(fn -> smoke_session(Keyword.put(opts, :launch_timeout, 15_000)) end)
+
+    case Task.yield(task, 50_000) || Task.shutdown(task, :brutal_kill) do
+      {:ok, :ok} ->
+        :ok
+
+      {:ok, {:error, reason}} ->
+        {:error, "#{browser} smoke test failed: #{format_reason(reason)}"}
+
+      {:exit, reason} ->
+        {:error, "#{browser} smoke test exited: #{format_reason(reason)}"}
+
+      nil ->
+        {:error, "#{browser} smoke test timed out"}
+    end
+  end
+
+  defp smoke_session(opts) do
+    Process.flag(:trap_exit, true)
+
+    with {:ok, session} <- Session.start_link(opts) do
+      try do
+        with {:ok, page} <- Session.new_page(session),
+             :ok <-
+               Session.goto(session, page, "data:text/html,<title>Playwriter setup</title>",
+                 timeout: 5_000
+               ),
+             {:ok, html} <- Session.content(session, page) do
+          if String.contains?(html, "<title>Playwriter setup</title>"),
+            do: :ok,
+            else: {:error, "unexpected smoke page contents"}
+        end
+      after
+        GenServer.stop(session, :normal, 10_000)
+      end
+    end
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  defp format_reason(reason) when is_binary(reason), do: reason
+  defp format_reason(reason), do: inspect(reason)
 
   defp with_setup_lock(dir, install) do
     lock = dir <> ".setup-lock"
@@ -162,13 +247,24 @@ defmodule Playwriter.Setup do
 
   defp install_windows_browser(_dir, _channel), do: :ok
 
-  def windows_channel do
-    case System.get_env("PLAYWRITER_WINDOWS_CHANNEL") ||
+  def windows_browser(explicit \\ nil) do
+    case explicit || System.get_env("PLAYWRITER_WINDOWS_CHANNEL") ||
            Application.get_env(:playwriter, :windows_channel) do
-      channel when channel in [nil, "chrome", "msedge"] -> {:ok, channel}
-      _ -> {:error, "Windows browser channel must be chrome or msedge."}
+      browser when browser in [nil, "chromium", "chrome", "msedge"] -> {:ok, browser}
+      _ -> {:error, "Windows browser must be chrome, msedge, or chromium."}
     end
   end
+
+  def windows_channel(explicit \\ nil) do
+    with {:ok, browser} <- windows_browser(explicit), do: {:ok, browser_channel(browser)}
+  end
+
+  def windows_browser_name("chrome"), do: "installed Google Chrome"
+  def windows_browser_name("msedge"), do: "installed Microsoft Edge"
+  def windows_browser_name("chromium"), do: "managed Chrome for Testing"
+
+  defp browser_channel(browser) when browser in [nil, "chromium"], do: nil
+  defp browser_channel(browser), do: browser
 
   def check_installed_channel(nil), do: :ok
 
@@ -260,13 +356,14 @@ defmodule Playwriter.Setup do
 
   defp probe_local(node, dir, browser) do
     with :ok <- driver_exists?(dir, "local") do
-      browsers = if browser == "all", do: ~w(chromium firefox webkit), else: [browser]
-
-      Enum.reduce_while(browsers, :ok, fn name, :ok ->
+      Enum.reduce_while(selected_local_browsers(browser), :ok, fn name, :ok ->
         continue_if_ok(run(node, ["-e", @browser_probe, @version, name], dir))
       end)
     end
   end
+
+  defp selected_local_browsers("all"), do: ~w(chromium firefox webkit)
+  defp selected_local_browsers(browser), do: [browser]
 
   defp continue_if_ok(:ok), do: {:cont, :ok}
   defp continue_if_ok(error), do: {:halt, error}

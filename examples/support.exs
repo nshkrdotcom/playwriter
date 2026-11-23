@@ -142,7 +142,7 @@ defmodule Playwriter.Examples.Support do
     IO.puts("")
     IO.puts("  1. Install Playwright on Windows:")
 
-    IO.puts("     mix playwriter.setup --mode windows")
+    IO.puts("     mix playwriter.setup --mode windows --browser chrome")
 
     IO.puts("")
     IO.puts("  2. Run with --windows flag:")
@@ -171,7 +171,7 @@ defmodule Playwriter.Examples.Support do
         IO.puts("Run the setup script:")
         IO.puts("")
 
-        IO.puts("    mix playwriter.setup --mode windows")
+        IO.puts("    mix playwriter.setup --mode windows --browser chrome")
 
         IO.puts("")
         IO.puts("Then try again.")
@@ -196,7 +196,7 @@ defmodule Playwriter.Examples.Support do
     IO.puts("")
     IO.puts("  1. Install Playwright on Windows:")
 
-    IO.puts("     mix playwriter.setup --mode windows")
+    IO.puts("     mix playwriter.setup --mode windows --browser chrome")
 
     IO.puts("")
     IO.puts("  2. Run example:")
@@ -240,7 +240,7 @@ defmodule Playwriter.Examples.Support do
         IO.puts("")
         IO.puts("Run the setup script:")
 
-        IO.puts("  mix playwriter.setup --mode windows")
+        IO.puts("  mix playwriter.setup --mode windows --browser chrome")
 
       :remote ->
         IO.puts("This may indicate:")
