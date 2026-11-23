@@ -2,7 +2,7 @@
 
 Playwriter 0.4 requires Elixir 1.18 or newer and Node.js 20 or newer for the driver. Use a supported Node LTS. Install Node through the package manager or workstation bootstrap that owns the target host.
 
-| Mode | Elixir runs in | Node and Chromium run in | Setup command |
+| Mode | Elixir runs in | Node and the browser run in | Setup command |
 | --- | --- | --- | --- |
 | `:local` (default) | Your current shell | The same environment, headless by default | `mix playwriter.setup` |
 | `:local` with `headless: false` | WSL | WSL, displayed through WSLg | `mix playwriter.setup` |
@@ -26,7 +26,7 @@ mix playwriter.setup --check
 mix run -e 'IO.inspect(Playwriter.fetch_html("data:text/html,<h1>Playwriter</h1>"))'
 ```
 
-Setup installs the locked npm driver into `.playwriter-driver/` and downloads its matching Chromium into Playwright's browser cache. You can select Firefox, WebKit or all browsers with `--browser`. On Linux, `--with-deps` explicitly requests system libraries and may require elevated privileges. `PLAYWRIGHT_BROWSERS_PATH` can select a dedicated cache. Use the same value for setup, checks and runs.
+Setup installs the locked npm driver into `.playwriter-driver/` and downloads the matching Chrome for Testing build into Playwright's browser cache by default. You can select Firefox, WebKit or all browsers with `--browser`. On Linux, `--with-deps` explicitly requests system libraries and may require elevated privileges. `PLAYWRIGHT_BROWSERS_PATH` can select a dedicated cache. Use the same value for setup, checks and runs.
 
 The local transport honors `PLAYWRIGHT_CLI` and then `config :playwriter, :playwright_cli` when you supply a driver yourself. Use the npm driver version tested with this release.
 
@@ -42,7 +42,7 @@ The browser runs in Linux and the window appears on the Windows desktop.
 
 ## Native Windows browser from WSL
 
-Install Node and npm on the **Windows** host first. Then use the commands in [WSL–Windows Setup](wsl-windows.md) to verify interop and prepare Windows Chromium. Run Playwriter from WSL with `mode: :windows`.
+Install Node and npm on the **Windows** host first. Then use the commands in [WSL–Windows Setup](wsl-windows.md) to verify interop and select a native Windows browser. Run Playwriter from WSL with `mode: :windows`.
 
 ## Your First Script
 

@@ -18,9 +18,8 @@ Execute a function with a managed browser session.
 
 **Options:**
 - `:mode` - `:local` (default) or `:windows`
-- `:browser_type` - `:chromium` (default), `:firefox`, or `:webkit`
-- `:headless` - `true` (default) or `false`
-- `:timeout` - Operation timeout in milliseconds (default: 30000)
+- `:browser_type` - `:chromium` (default), `:firefox`, or `:webkit` in local mode. See [Windows browser selection](wsl-windows.md#2-choose-and-verify-a-windows-browser) for Windows mode.
+- `:headless` - Defaults to `true` in local mode and `false` in Windows mode.
 
 **Returns:**
 - `{:ok, result}` - The return value of the function
@@ -49,7 +48,7 @@ Fetch HTML content from a URL.
 
 **Parameters:**
 - `url` - The URL to fetch
-- `opts` - Options (same as `with_browser/2`)
+- `opts` - Options from `with_browser/2`, plus the navigation `:timeout` and, in local mode, `:wait_until`.
 
 **Example:**
 ```elixir
@@ -68,9 +67,7 @@ Take a screenshot of a URL.
 **Parameters:**
 - `url` - The URL to screenshot
 - `opts` - Options including:
-  - `:full_page` - Capture full scrollable page (default: false)
-  - `:type` - `:png` (default) or `:jpeg`
-  - `:quality` - JPEG quality 0-100 (only for `:jpeg`)
+  - `:full_page` - Capture the full scrollable page in local mode (default: false)
   - All `with_browser/2` options
 
 **Example:**
@@ -95,7 +92,7 @@ Navigate to a URL within a browser session.
 - `url` - URL to navigate to
 - `opts` - Navigation options:
   - `:timeout` - Navigation timeout in ms
-  - `:wait_until` - `:load`, `:domcontentloaded`, `:networkidle`
+  - `:wait_until` (local mode) - `:load`, `:domcontentloaded`, `:networkidle`, or `:commit`
 
 **Example:**
 ```elixir
@@ -138,9 +135,6 @@ Click an element matching a selector.
 - `selector` - CSS selector or text selector
 - `opts` - Click options:
   - `:timeout` - Wait timeout for element
-  - `:button` - `:left`, `:right`, or `:middle`
-  - `:click_count` - Number of clicks (default: 1)
-  - `:delay` - Time between mousedown and mouseup in ms
 
 **Selectors:**
 ```elixir
@@ -208,8 +202,7 @@ The context passed to `with_browser/2` callbacks contains:
 ```elixir
 %{
   session: pid(),      # Browser session GenServer
-  page: String.t(),    # Page GUID for operations
-  frame: String.t()    # Main frame GUID
+  page: String.t()     # Session page ID
 }
 ```
 
@@ -219,7 +212,7 @@ You typically don't need to access these directly; pass the context to Playwrite
 
 ### discover/1
 
-Automatically find a running Playwright server.
+Find a running legacy WebSocket endpoint. The supported local and Windows transports use their own driver processes.
 
 ```elixir
 @spec discover(keyword()) :: {:ok, String.t()} | {:error, :not_found}
@@ -244,13 +237,13 @@ Automatically find a running Playwright server.
 Get the Windows host IP from WSL.
 
 ```elixir
-@spec get_wsl2_host_ip() :: {:ok, String.t()} | {:error, term()}
+@spec get_wsl2_host_ip() :: String.t() | nil
 ```
 
 **Example:**
 ```elixir
-{:ok, ip} = Playwriter.Server.Discovery.get_wsl2_host_ip()
-# => {:ok, "172.25.160.1"}
+Playwriter.Server.Discovery.get_wsl2_host_ip()
+# => "172.25.160.1" or nil
 ```
 
 ## Browser Session: `Playwriter.Browser.Session`
@@ -265,20 +258,21 @@ Start a browser session.
 @spec start_link(keyword()) :: {:ok, pid()} | {:error, term()}
 ```
 
-### get_page/1
+### new_page/2
 
-Get the current page GUID.
+Create a page in the session. The second argument is an optional keyword list.
+Use the returned page ID with session operations.
 
 ```elixir
-@spec get_page(pid()) :: {:ok, String.t()} | {:error, term()}
+{:ok, page} = Playwriter.Browser.Session.new_page(session)
 ```
 
-### stop/1
+### close/1
 
-Stop a browser session.
+Close the session and release its browser resources.
 
 ```elixir
-@spec stop(pid()) :: :ok
+:ok = Playwriter.Browser.Session.close(session)
 ```
 
 ## Transport Behaviour
@@ -300,23 +294,13 @@ The local and Windows transports implement `Playwriter.Transport.Behaviour`:
 
 ## Error Handling
 
-All functions return `{:ok, result}` or `{:error, reason}` tuples.
-
-Common error reasons:
-- `:timeout` - Operation timed out
-- `:not_found` - Element or server not found
-- `{:navigation_failed, reason}` - Page navigation failed
-- `{:connection_error, reason}` - WebSocket connection failed
+Browser operations generally return `:ok`, `{:ok, result}`, or `{:error, reason}`. The error reason can vary by transport and operation.
 
 **Example:**
 ```elixir
 case Playwriter.fetch_html(url) do
   {:ok, html} ->
     process_html(html)
-
-  {:error, :timeout} ->
-    Logger.warning("Request timed out")
-    {:error, :timeout}
 
   {:error, reason} ->
     Logger.error("Failed: #{inspect(reason)}")
@@ -327,7 +311,7 @@ end
 ## Type Specifications
 
 ```elixir
-@type context() :: %{session: pid(), page: String.t(), frame: String.t()}
+@type context() :: %{session: pid(), page: String.t()}
 @type browser_type() :: :chromium | :firefox | :webkit
 @type guid() :: String.t()
 @type result() :: :ok | {:ok, term()} | {:error, term()}

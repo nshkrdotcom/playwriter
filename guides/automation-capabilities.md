@@ -23,8 +23,9 @@ page-scoped ones also have thin `Playwriter` facade wrappers for use inside
 | `expose_binding/4` | ✅ (experimental) | `:not_supported` | — |
 | binary returns (`screenshot/3`) | ✅ `value_b64` | ✅ | — |
 
-`:remote` is a deliberate dead stub (WSL2's Hyper-V firewall blocks its
-WebSocket); every callback returns `{:error, :not_supported}`.
+The legacy `:remote` transport is unsupported. The Windows capabilities in
+this table apply to installed Chrome, installed Edge, and the managed browser
+when the selected browser can launch.
 
 ## `evaluate/4` — run JavaScript, get the result
 
@@ -162,7 +163,8 @@ mix playwriter.setup            # install the pinned driver and Chromium
 mix playwriter.setup --with-deps  # also install OS libraries (needs sudo)
 ```
 
-The driver is resolved from `PLAYWRIGHT_CLI`, then
-`config :playwriter, :playwright_cli`, then `node_modules/playwright/cli.js`. The
-pinned version lives in the project's `package.json` and tracks the version
-`playwright_ex` targets.
+The local transport checks `PLAYWRIGHT_CLI` first, then
+`config :playwriter, :playwright_cli`, then the driver staged under
+`.playwriter-driver/node_modules/playwright/cli.js`. It also checks legacy
+driver locations for existing installations. Playwriter ships its pinned
+driver manifest and lockfile in `priv/driver/`.

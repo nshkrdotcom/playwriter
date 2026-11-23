@@ -195,6 +195,8 @@ end
 
 ## WSL to Windows
 
+From WSL, select an installed Windows browser and follow [WSL–Windows Setup](wsl-windows.md) before running these examples. To show Chrome for Testing through WSLg, use local mode with `headless: false`.
+
 ### Visible Browser Development
 
 ```elixir
@@ -233,7 +235,7 @@ defmodule DebugScraper do
         debug_loop(ctx)
 
       "screenshot" ->
-        {:ok, png} = Playwriter.screenshot(ctx)
+        {:ok, png} = Playwriter.take_screenshot(ctx)
         File.write!("debug.png", png)
         IO.puts("Saved to debug.png")
         debug_loop(ctx)

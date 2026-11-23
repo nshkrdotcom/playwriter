@@ -41,7 +41,7 @@ Playwriter.with_browser([], fn ctx ->
 end)
 ```
 
-**Solution - use wait_until:**
+In local mode, use `:wait_until`:
 ```elixir
 :ok = Playwriter.goto(ctx, url, wait_until: :networkidle)
 ```
@@ -166,13 +166,13 @@ Playwriter.with_browser([headless: false], fn ctx ->
   :ok = Playwriter.goto(ctx, url)
 
   # Before action
-  {:ok, before} = Playwriter.screenshot(ctx)
+  {:ok, before} = Playwriter.take_screenshot(ctx)
   File.write!("/tmp/before.png", before)
 
   result = Playwriter.click(ctx, selector)
 
   # After action (or on error)
-  {:ok, after_shot} = Playwriter.screenshot(ctx)
+  {:ok, after_shot} = Playwriter.take_screenshot(ctx)
   File.write!("/tmp/after.png", after_shot)
 
   result
@@ -198,7 +198,7 @@ end)
 
 If you're still stuck:
 
-1. Check existing issues: https://github.com/yourusername/playwriter/issues
+1. Check existing issues: [Playwriter issues](https://github.com/nshkrdotcom/playwriter/issues)
 2. Open a new issue with:
    - Playwriter version (`Playwriter.version()`)
    - Elixir/OTP versions (`elixir -v`)

@@ -93,7 +93,9 @@ The local and Windows transports implement `Playwriter.Transport.Behaviour`. The
 
 ### 4. Server Discovery (`Playwriter.Server.Discovery`)
 
-Automatically finds Playwright servers in WSL environments:
+The legacy discovery helper probes WebSocket endpoints. The local and Windows stdio transports run without discovery.
+
+Discovery behavior:
 
 - Scans common ports (3337, 3336, 3335, etc.)
 - Tries multiple host addresses (localhost, WSL gateway IP, etc.)
@@ -111,7 +113,7 @@ Session.start_link()
      │
      ├──▶ Transport.Local.start_link()
      │         │
-     │         └──▶ Playwright.Supervisor.start_link()
+     │         └──▶ Playwriter.LocalDriver acquires the shared driver
      │                    │
      │                    └──▶ Node.js Playwright Driver
      │
@@ -131,7 +133,7 @@ Playwriter.with_browser([mode: :windows])
   → Session.start_link()
   → WindowsCmd checks the Windows driver and opens PowerShell
   → Windows Node worker receives JSON commands on stdin
-  → Playwright opens Chromium on the Windows desktop
+  → Playwright opens the selected browser on the Windows desktop
 ```
 
 ## Error Handling

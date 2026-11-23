@@ -16,18 +16,13 @@
 
 ---
 
-## The Problem
+## Browser automation from WSL
 
-You're developing in WSL. You need to automate a browser. But when you launch Chromium from WSL, you get a headless process or an invisible window buried in a virtual display. You can't see what's happening. You can't debug visually. You can't demo to anyone.
-
-## The Solution
-
-Playwriter runs Playwright directly on Windows via PowerShell, controlled from your Elixir code in WSL. The browser opens on your Windows desktop where you can see it. Click buttons, fill forms, take screenshots—all visible in real-time. No server setup, no firewall rules, no network configuration.
-
-```elixir
-# This browser opens on your Windows desktop - visible!
-{:ok, html} = Playwriter.fetch_html("https://example.com", mode: :windows)
-```
+Playwriter supports headless and visible browsers. In local mode, the browser
+runs alongside Elixir and can display a window through WSLg. In Windows mode,
+Elixir runs in WSL and controls a native Windows browser through a Node worker
+started by PowerShell. The worker uses stdin and stdout, so setup requires no
+WebSocket server or firewall configuration.
 
 ## Quick Start
 
@@ -203,8 +198,8 @@ Playwriter.fetch_html(url, mode: :windows)
 Playwriter.fetch_html(url,
   mode: :windows,                   # :local or :windows
   headless: false,                  # true for invisible, false to watch
-  browser_type: :chromium,          # :chromium (only for :windows mode)
-  timeout: 30_000                   # milliseconds
+  browser_type: :chromium,          # Firefox and WebKit are available in local mode
+  timeout: 30_000                   # navigation timeout in milliseconds
 )
 ```
 

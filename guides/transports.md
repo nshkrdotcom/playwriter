@@ -1,6 +1,6 @@
 # Transport Layer
 
-Playwriter's transport layer abstracts the communication between your Elixir application and the Playwright browser automation engine. This design enables local, Windows, and remote browser control through a unified API.
+Playwriter's transport layer abstracts the communication between your Elixir application and the Playwright browser automation engine. The local and Windows transports expose the same browser API.
 
 ## Transport Abstraction
 
@@ -105,10 +105,11 @@ end)
 
 ### Setup
 
-One-time installation:
+Select a browser and keep the same setting for setup and runtime. See [WSL–Windows Setup](wsl-windows.md) for the available choices.
 
 ```bash
-PLAYWRITER_WINDOWS_CHANNEL=chrome mix playwriter.setup --mode windows
+export PLAYWRITER_WINDOWS_CHANNEL=chrome
+mix playwriter.setup --mode windows
 ```
 
 ### Advantages
@@ -116,43 +117,26 @@ PLAYWRITER_WINDOWS_CHANNEL=chrome mix playwriter.setup --mode windows
 - **Visible browsers** - See automation happening in real-time
 - **No network issues** - Bypasses WSL2 Hyper-V firewall completely
 - **No server required** - Run the one-time stdio setup
-- **Best for WSL development** - The recommended mode for WSL users
+- **Native Windows browser** - The browser process runs on Windows
 
 ### Limitations
 
 - Only works from WSL to Windows
-- Currently only supports Chromium
+- Supports installed Chrome or Edge, or managed Chrome for Testing
 - Slightly higher startup latency than local mode
 
 ## Remote Transport
 
-The remote transport (`Playwriter.Transport.Remote`) is designed for connecting via WebSocket to a Playwright server running elsewhere.
-
-### Current Status
-
-**Status:** The remote transport is unsupported. Use `:windows` for WSL-to-Windows automation.
-
-The remote transport returns a helpful error message directing users to `:windows` mode:
-
-```elixir
-{:error, {:not_supported, "Use mode: :windows instead..."}} =
-  Playwriter.fetch_html(url, mode: :remote)
-```
-
-### When Remote Would Be Useful
-
-In non-WSL scenarios where you have network access to a Playwright server:
-- Distributed browser automation across machines
-- Controlling browsers in cloud environments
-- Separating browser execution from application logic
+The legacy `:remote` WebSocket transport is unsupported. Use `:windows` for a
+native Windows browser from WSL.
 
 ## Choosing a Transport
 
 | Scenario | Recommended Transport |
 |----------|----------------------|
 | CI/CD pipelines | `:local` (headless) |
-| WSL development | `:windows` |
-| WSL debugging | `:windows` |
+| Visible Chrome for Testing through WSLg | `:local` with `headless: false` |
+| Native Windows browser from WSL | `:windows` |
 | Docker containers | `:local` |
 | Production scraping | `:local` (headless) |
 | E2E test development | `:windows` (see browser) |
@@ -215,7 +199,7 @@ mix playwriter.setup --with-deps
 
 **"Timeout waiting for transport to start"**
 - Ensure Node.js is installed on Windows
-- Run the setup script: `mix playwriter.setup --mode windows`
+- Check the selected browser and driver with `mix playwriter.setup --mode windows --browser chrome --check` (substitute your selected browser).
 
 For missing or stale driver assets, see [WSL–Windows Setup](wsl-windows.md).
 

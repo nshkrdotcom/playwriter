@@ -8,7 +8,7 @@ This guide covers running and writing tests for Playwriter.
 # Run unit tests (no browser required)
 mix test
 
-# Run all tests (requires setup)
+# Run the local browser suite (requires setup)
 mix playwriter.setup
 INTEGRATION=true mix test
 ```
@@ -21,8 +21,9 @@ Playwriter tests are organized by what infrastructure they require:
 |-----|----------|----------|
 | (none) | Nothing | `mix test` |
 | `:requires_browser` | Local Playwright | `INTEGRATION=true mix test` |
-| `:requires_windows_server` | Windows server | `PLAYWRITER_WINDOWS_CHANNEL=chrome WINDOWS_SERVER=true mix test` |
-| `:wsl_only` | WSL environment | `PLAYWRITER_WINDOWS_CHANNEL=chrome WINDOWS_SERVER=true mix test` |
+| `:requires_windows_server` | Windows stdio driver and selected browser | `PLAYWRITER_WINDOWS_CHANNEL=chrome WINDOWS_SERVER=true mix test` |
+| `:wsl_only` | WSL environment | `mix test --include wsl_only` |
+| `:requires_legacy_server` | Running legacy WebSocket server | `mix test --include requires_legacy_server` |
 | `:integration` | Local Playwright | `INTEGRATION=true mix test` |
 
 ## Running Tests
@@ -70,9 +71,9 @@ PLAYWRITER_WINDOWS_CHANNEL=chrome WINDOWS_SERVER=true mix test test/playwriter/c
 
 The historical `WINDOWS_SERVER` switch enables Windows stdio tests. Legacy discovery tests require the separate `--include requires_legacy_server` flag and a running legacy server.
 
-### All Tests
+### Combined local and Windows browser suites
 
-To run the complete test suite:
+To run the unit tests and both supported browser suites:
 
 ```bash
 # 1. Install local Playwright
@@ -81,7 +82,7 @@ mix playwriter.setup
 # 2. Provision the Windows stdio driver
 PLAYWRITER_WINDOWS_CHANNEL=chrome mix playwriter.setup --mode windows
 
-# 3. Run all tests
+# 3. Run the combined suites
 PLAYWRITER_WINDOWS_CHANNEL=chrome INTEGRATION=true WINDOWS_SERVER=true mix test
 ```
 
@@ -163,10 +164,11 @@ For tests that only make sense in WSL:
 
 ```elixir
 @tag :wsl_only
-@tag :requires_windows_server
-test "discovers Windows server from WSL" do
-  {:ok, endpoint} = Playwriter.Server.Discovery.discover()
-  assert endpoint =~ "ws://"
+test "reads a WSL gateway address when available" do
+  case Playwriter.Server.Discovery.get_wsl2_host_ip() do
+    nil -> :ok
+    ip -> assert is_binary(ip)
+  end
 end
 ```
 

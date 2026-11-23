@@ -1,6 +1,6 @@
 # WSL–Windows Setup
 
-Use `mode: :windows` to run a visible Chromium on your Windows desktop with Elixir in WSL. Playwriter launches a Windows Node worker via PowerShell and communicates over stdio. The supported path requires WSL interop and a Windows desktop session for visible operation.
+Use `mode: :windows` to run a visible Chrome, Edge, or managed Chrome for Testing browser on your Windows desktop with Elixir in WSL. Playwriter launches a Windows Node worker via PowerShell and communicates over stdio. The supported path requires WSL interop and a Windows desktop session for visible operation.
 
 ## 1. Verify Windows Node
 
@@ -81,14 +81,14 @@ Playwriter.with_browser([mode: :windows], fn ctx ->
   :ok = Playwriter.goto(ctx, "https://example.com")
 
   # Screenshot before clicking
-  {:ok, before} = Playwriter.screenshot(ctx)
+  {:ok, before} = Playwriter.take_screenshot(ctx)
   File.write!("before.png", before)
 
   :ok = Playwriter.click(ctx, "button.submit")
   Process.sleep(1000)  # Wait for navigation
 
   # Screenshot after
-  {:ok, after_shot} = Playwriter.screenshot(ctx)
+  {:ok, after_shot} = Playwriter.take_screenshot(ctx)
   File.write!("after.png", after_shot)
 end)
 ```
